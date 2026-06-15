@@ -1,241 +1,422 @@
-const imageInput = document.getElementById("imageInput");
-const scanButton = document.getElementById("scanButton");
-const clearButton = document.getElementById("clearButton");
-const canvas = document.getElementById("canvas");
-const ctx = canvas.getContext("2d", { willReadFrequently: true });
+const dropZone = document.getElementById("dropZone");
+const fileInput = document.getElementById("fileInput");
+const folderInput = document.getElementById("folderInput");
 
-const imageInfo = document.getElementById("imageInfo");
-const lineCount = document.getElementById("lineCount");
-const horizontalCount = document.getElementById("horizontalCount");
-const verticalCount = document.getElementById("verticalCount");
+const bgSelect = document.getElementById("bgSelect");
+const contentSelect = document.getElementById("contentSelect");
+const resetQuadButton = document.getElementById("resetQuadButton");
+const fitButton = document.getElementById("fitButton");
 
-let sourceImage = null;
-let sourceBitmap = null;
+const stage = document.getElementById("stage");
+const backgroundImage = document.getElementById("backgroundImage");
+const mappedLayer = document.getElementById("mappedLayer");
+const mappedImage = document.getElementById("mappedImage");
+const mappedVideo = document.getElementById("mappedVideo");
 
-imageInput.addEventListener("change", async (event) => {
-  const file = event.target.files[0];
-  if (!file) return;
+const fileList = document.getElementById("fileList");
+const bgInfo = document.getElementById("bgInfo");
+const contentInfo = document.getElementById("contentInfo");
+const modeInfo = document.getElementById("modeInfo");
 
-  const url = URL.createObjectURL(file);
-  const img = new Image();
+const handles = [
+  document.getElementById("h0"),
+  document.getElementById("h1"),
+  document.getElementById("h2"),
+  document.getElementById("h3"),
+];
 
-  img.onload = async () => {
-    sourceImage = img;
-    sourceBitmap = img;
+const files = [];
+let bgUrl = null;
+let contentUrl = null;
+let activeHandle = null;
 
-    const maxWidth = 1280;
-    const scale = Math.min(1, maxWidth / img.width);
+let quad = [
+  { x: 160, y: 120 },
+  { x: 640, y: 120 },
+  { x: 640, y: 390 },
+  { x: 160, y: 390 },
+];
 
-    canvas.width = Math.round(img.width * scale);
-    canvas.height = Math.round(img.height * scale);
-
-    drawBaseImage();
-
-    imageInfo.textContent = `${img.width} x ${img.height}`;
-    scanButton.disabled = false;
-    clearButton.disabled = false;
-
-    resetStats();
-    URL.revokeObjectURL(url);
-  };
-
-  img.src = url;
+fileInput.addEventListener("change", (event) => {
+  addFiles(Array.from(event.target.files));
 });
 
-scanButton.addEventListener("click", () => {
-  if (!sourceBitmap) return;
-
-  drawBaseImage();
-
-  const edgeMap = detectEdges();
-  const lines = detectStrongLines(edgeMap);
-
-  drawLines(lines);
-
-  const horizontal = lines.filter((line) => line.type === "horizontal");
-  const vertical = lines.filter((line) => line.type === "vertical");
-
-  lineCount.textContent = String(lines.length);
-  horizontalCount.textContent = String(horizontal.length);
-  verticalCount.textContent = String(vertical.length);
+folderInput.addEventListener("change", (event) => {
+  addFiles(Array.from(event.target.files));
 });
 
-clearButton.addEventListener("click", () => {
-  drawBaseImage();
-  resetStats();
+dropZone.addEventListener("dragover", (event) => {
+  event.preventDefault();
+  dropZone.classList.add("is-over");
 });
 
-function drawBaseImage() {
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-  ctx.drawImage(sourceBitmap, 0, 0, canvas.width, canvas.height);
-}
+dropZone.addEventListener("dragleave", () => {
+  dropZone.classList.remove("is-over");
+});
 
-function resetStats() {
-  lineCount.textContent = "0";
-  horizontalCount.textContent = "0";
-  verticalCount.textContent = "0";
-}
+dropZone.addEventListener("drop", async (event) => {
+  event.preventDefault();
+  dropZone.classList.remove("is-over");
 
-function detectEdges() {
-  const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-  const { data, width, height } = imageData;
-
-  const gray = new Uint8ClampedArray(width * height);
-  const edges = new Uint8ClampedArray(width * height);
-
-  for (let i = 0; i < width * height; i++) {
-    const r = data[i * 4];
-    const g = data[i * 4 + 1];
-    const b = data[i * 4 + 2];
-    gray[i] = Math.round(0.299 * r + 0.587 * g + 0.114 * b);
-  }
-
-  for (let y = 1; y < height - 1; y++) {
-    for (let x = 1; x < width - 1; x++) {
-      const i = y * width + x;
-
-      const gx =
-        -gray[(y - 1) * width + (x - 1)] +
-        gray[(y - 1) * width + (x + 1)] +
-        -2 * gray[y * width + (x - 1)] +
-        2 * gray[y * width + (x + 1)] +
-        -gray[(y + 1) * width + (x - 1)] +
-        gray[(y + 1) * width + (x + 1)];
-
-      const gy =
-        -gray[(y - 1) * width + (x - 1)] -
-        2 * gray[(y - 1) * width + x] -
-        gray[(y - 1) * width + (x + 1)] +
-        gray[(y + 1) * width + (x - 1)] +
-        2 * gray[(y + 1) * width + x] +
-        gray[(y + 1) * width + (x + 1)];
-
-      const magnitude = Math.sqrt(gx * gx + gy * gy);
-      edges[i] = magnitude > 95 ? 255 : 0;
-    }
-  }
-
-  return {
-    width,
-    height,
-    data: edges,
-  };
-}
-
-function detectStrongLines(edgeMap) {
-  const { width, height, data } = edgeMap;
-  const lines = [];
-
-  const horizontalStep = Math.max(4, Math.floor(height / 180));
-  const verticalStep = Math.max(4, Math.floor(width / 220));
-
-  for (let y = 0; y < height; y += horizontalStep) {
-    let hits = 0;
-
-    for (let x = 0; x < width; x++) {
-      if (data[y * width + x] > 0) hits++;
-    }
-
-    const ratio = hits / width;
-
-    if (ratio > 0.16) {
-      lines.push({
-        type: "horizontal",
-        score: ratio,
-        x1: 0,
-        y1: y,
-        x2: width,
-        y2: y,
-      });
-    }
-  }
-
-  for (let x = 0; x < width; x += verticalStep) {
-    let hits = 0;
-
-    for (let y = 0; y < height; y++) {
-      if (data[y * width + x] > 0) hits++;
-    }
-
-    const ratio = hits / height;
-
-    if (ratio > 0.16) {
-      lines.push({
-        type: "vertical",
-        score: ratio,
-        x1: x,
-        y1: 0,
-        x2: x,
-        y2: height,
-      });
-    }
-  }
-
-  return mergeNearbyLines(lines);
-}
-
-function mergeNearbyLines(lines) {
-  const merged = [];
-  const threshold = 14;
-
-  const horizontal = lines
-    .filter((line) => line.type === "horizontal")
-    .sort((a, b) => a.y1 - b.y1);
-
-  const vertical = lines
-    .filter((line) => line.type === "vertical")
-    .sort((a, b) => a.x1 - b.x1);
-
-  mergeGroup(horizontal, "horizontal");
-  mergeGroup(vertical, "vertical");
-
-  function mergeGroup(group, type) {
-    let current = null;
-
-    for (const line of group) {
-      if (!current) {
-        current = { ...line };
-        continue;
-      }
-
-      const distance =
-        type === "horizontal"
-          ? Math.abs(line.y1 - current.y1)
-          : Math.abs(line.x1 - current.x1);
-
-      if (distance < threshold) {
-        if (line.score > current.score) current = { ...line };
-      } else {
-        merged.push(current);
-        current = { ...line };
+  const items = Array.from(event.dataTransfer.items || []);
+  if (items.length && items[0].webkitGetAsEntry) {
+    const droppedFiles = [];
+    for (const item of items) {
+      const entry = item.webkitGetAsEntry();
+      if (entry) {
+        const entryFiles = await readEntry(entry);
+        droppedFiles.push(...entryFiles);
       }
     }
+    addFiles(droppedFiles);
+  } else {
+    addFiles(Array.from(event.dataTransfer.files || []));
+  }
+});
 
-    if (current) merged.push(current);
+bgSelect.addEventListener("change", () => {
+  const file = files[Number(bgSelect.value)];
+  if (file) setBackground(file);
+});
+
+contentSelect.addEventListener("change", () => {
+  const file = files[Number(contentSelect.value)];
+  if (file) setContent(file);
+});
+
+resetQuadButton.addEventListener("click", () => {
+  resetQuad();
+  updateWarp();
+});
+
+fitButton.addEventListener("click", () => {
+  fitQuadToCenter();
+  updateWarp();
+});
+
+handles.forEach((handle, index) => {
+  handle.addEventListener("pointerdown", (event) => {
+    activeHandle = index;
+    handle.setPointerCapture(event.pointerId);
+  });
+
+  handle.addEventListener("pointermove", (event) => {
+    if (activeHandle !== index) return;
+
+    const rect = stage.getBoundingClientRect();
+    quad[index] = {
+      x: event.clientX - rect.left,
+      y: event.clientY - rect.top,
+    };
+
+    updateWarp();
+  });
+
+  handle.addEventListener("pointerup", () => {
+    activeHandle = null;
+  });
+});
+
+window.addEventListener("resize", () => {
+  if (backgroundImage.src) {
+    fitQuadToCenter();
+    updateWarp();
+  }
+});
+
+function addFiles(newFiles) {
+  const valid = newFiles.filter((file) =>
+    file.type.startsWith("image/") || file.type.startsWith("video/")
+  );
+
+  for (const file of valid) {
+    const exists = files.some((item) => item.name === file.name && item.size === file.size);
+    if (!exists) files.push(file);
   }
 
-  return merged
-    .sort((a, b) => b.score - a.score)
-    .slice(0, 40);
+  refreshFileUI();
+
+  if (!backgroundImage.src) {
+    const firstImage = files.find((file) => file.type.startsWith("image/"));
+    if (firstImage) setBackground(firstImage);
+  }
+
+  if (!contentUrl) {
+    const firstContent = files.find((file) => file.type.startsWith("video/")) ||
+      files.find((file) => file.type.startsWith("image/") && file !== getCurrentBgFile());
+
+    if (firstContent) setContent(firstContent);
+  }
 }
 
-function drawLines(lines) {
-  ctx.save();
-  ctx.lineWidth = 2;
+function refreshFileUI() {
+  bgSelect.innerHTML = "";
+  contentSelect.innerHTML = "";
+  fileList.innerHTML = "";
 
-  for (const line of lines) {
-    ctx.beginPath();
+  files.forEach((file, index) => {
+    const label = `${file.type.startsWith("video/") ? "VIDEO" : "IMAGE"} - ${file.name}`;
 
-    if (line.type === "horizontal") {
-      ctx.strokeStyle = "rgba(0, 255, 255, 0.85)";
-    } else {
-      ctx.strokeStyle = "rgba(255, 80, 180, 0.85)";
+    if (file.type.startsWith("image/")) {
+      const option = document.createElement("option");
+      option.value = String(index);
+      option.textContent = label;
+      bgSelect.appendChild(option);
     }
 
-    ctx.moveTo(line.x1, line.y1);
-    ctx.lineTo(line.x2, line.y2);
-    ctx.stroke();
+    const contentOption = document.createElement("option");
+    contentOption.value = String(index);
+    contentOption.textContent = label;
+    contentSelect.appendChild(contentOption);
+
+    const item = document.createElement("div");
+    item.textContent = label;
+    fileList.appendChild(item);
+  });
+}
+
+function getCurrentBgFile() {
+  if (!bgSelect.value) return null;
+  return files[Number(bgSelect.value)] || null;
+}
+
+function setBackground(file) {
+  if (bgUrl) URL.revokeObjectURL(bgUrl);
+  bgUrl = URL.createObjectURL(file);
+
+  backgroundImage.onload = () => {
+    bgInfo.textContent = file.name;
+    modeInfo.textContent = "배경 적용";
+    fitQuadToCenter();
+    showHandles(true);
+    updateWarp();
+    resetQuadButton.disabled = false;
+    fitButton.disabled = false;
+  };
+
+  backgroundImage.src = bgUrl;
+
+  const index = files.indexOf(file);
+  if (index >= 0) bgSelect.value = String(index);
+}
+
+function setContent(file) {
+  if (contentUrl) URL.revokeObjectURL(contentUrl);
+  contentUrl = URL.createObjectURL(file);
+
+  mappedImage.style.display = "none";
+  mappedVideo.style.display = "none";
+  mappedVideo.pause();
+  mappedVideo.removeAttribute("src");
+  mappedImage.removeAttribute("src");
+
+  if (file.type.startsWith("video/")) {
+    mappedVideo.src = contentUrl;
+    mappedVideo.style.display = "block";
+    mappedVideo.play().catch(() => {});
+    modeInfo.textContent = "영상 매핑";
+  } else {
+    mappedImage.src = contentUrl;
+    mappedImage.style.display = "block";
+    modeInfo.textContent = "이미지 매핑";
   }
 
-  ctx.restore();
+  contentInfo.textContent = file.name;
+
+  const index = files.indexOf(file);
+  if (index >= 0) contentSelect.value = String(index);
+
+  updateWarp();
+}
+
+function resetQuad() {
+  const rect = stage.getBoundingClientRect();
+  const w = Math.max(320, rect.width * 0.55);
+  const h = Math.max(180, rect.height * 0.38);
+  const x = (rect.width - w) / 2;
+  const y = (rect.height - h) / 2;
+
+  quad = [
+    { x, y },
+    { x: x + w, y },
+    { x: x + w, y: y + h },
+    { x, y: y + h },
+  ];
+}
+
+function fitQuadToCenter() {
+  const rect = stage.getBoundingClientRect();
+  const w = rect.width * 0.5;
+  const h = rect.height * 0.32;
+  const x = rect.width * 0.25;
+  const y = rect.height * 0.34;
+
+  quad = [
+    { x, y },
+    { x: x + w, y },
+    { x: x + w, y: y + h },
+    { x, y: y + h },
+  ];
+}
+
+function updateWarp() {
+  if (!backgroundImage.src) return;
+
+  const width = 320;
+  const height = 180;
+
+  mappedLayer.style.width = `${width}px`;
+  mappedLayer.style.height = `${height}px`;
+
+  const matrix = getProjectiveTransform(
+    [
+      { x: 0, y: 0 },
+      { x: width, y: 0 },
+      { x: width, y: height },
+      { x: 0, y: height },
+    ],
+    quad
+  );
+
+  mappedLayer.style.transform = matrixToCss(matrix);
+
+  handles.forEach((handle, index) => {
+    handle.style.left = `${quad[index].x}px`;
+    handle.style.top = `${quad[index].y}px`;
+  });
+}
+
+function showHandles(show) {
+  handles.forEach((handle) => {
+    handle.style.display = show ? "block" : "none";
+  });
+}
+
+function getProjectiveTransform(src, dst) {
+  const a = [];
+  const b = [];
+
+  for (let i = 0; i < 4; i++) {
+    const x = src[i].x;
+    const y = src[i].y;
+    const u = dst[i].x;
+    const v = dst[i].y;
+
+    a.push([x, y, 1, 0, 0, 0, -u * x, -u * y]);
+    b.push(u);
+
+    a.push([0, 0, 0, x, y, 1, -v * x, -v * y]);
+    b.push(v);
+  }
+
+  const h = solveLinearSystem(a, b);
+  h.push(1);
+
+  return [
+    h[0], h[1], h[2],
+    h[3], h[4], h[5],
+    h[6], h[7], h[8],
+  ];
+}
+
+function matrixToCss(h) {
+  const a = h[0];
+  const b = h[3];
+  const c = 0;
+  const d = h[6];
+
+  const e = h[1];
+  const f = h[4];
+  const g = 0;
+  const i = h[7];
+
+  const j = 0;
+  const k = 0;
+  const l = 1;
+  const m = 0;
+
+  const n = h[2];
+  const o = h[5];
+  const p = 0;
+  const q = h[8];
+
+  return `matrix3d(${a},${b},${c},${d},${e},${f},${g},${i},${j},${k},${l},${m},${n},${o},${p},${q})`;
+}
+
+function solveLinearSystem(a, b) {
+  const n = b.length;
+
+  for (let i = 0; i < n; i++) {
+    let maxRow = i;
+
+    for (let k = i + 1; k < n; k++) {
+      if (Math.abs(a[k][i]) > Math.abs(a[maxRow][i])) {
+        maxRow = k;
+      }
+    }
+
+    [a[i], a[maxRow]] = [a[maxRow], a[i]];
+    [b[i], b[maxRow]] = [b[maxRow], b[i]];
+
+    const pivot = a[i][i] || 1e-12;
+
+    for (let k = i + 1; k < n; k++) {
+      const factor = a[k][i] / pivot;
+
+      for (let j = i; j < n; j++) {
+        a[k][j] -= factor * a[i][j];
+      }
+
+      b[k] -= factor * b[i];
+    }
+  }
+
+  const x = new Array(n).fill(0);
+
+  for (let i = n - 1; i >= 0; i--) {
+    let sum = b[i];
+
+    for (let j = i + 1; j < n; j++) {
+      sum -= a[i][j] * x[j];
+    }
+
+    x[i] = sum / (a[i][i] || 1e-12);
+  }
+
+  return x;
+}
+
+function readEntry(entry) {
+  return new Promise((resolve) => {
+    if (entry.isFile) {
+      entry.file((file) => resolve([file]), () => resolve([]));
+      return;
+    }
+
+    if (entry.isDirectory) {
+      const reader = entry.createReader();
+      const all = [];
+
+      function readBatch() {
+        reader.readEntries(async (entries) => {
+          if (!entries.length) {
+            resolve(all);
+            return;
+          }
+
+          for (const child of entries) {
+            const childFiles = await readEntry(child);
+            all.push(...childFiles);
+          }
+
+          readBatch();
+        }, () => resolve(all));
+      }
+
+      readBatch();
+      return;
+    }
+
+    resolve([]);
+  });
 }
