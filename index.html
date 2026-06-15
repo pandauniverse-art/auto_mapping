@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Spatial Facade Mapper</title>
- <link rel="stylesheet" href="./style.css" />
+  <link rel="stylesheet" href="./style.css" />
   
   <script async src="https://docs.opencv.org/4.8.0/opencv.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/numeric/1.2.6/numeric.min.js"></script>
@@ -35,7 +35,7 @@
       </label>
 
       <button id="scanAreaButton" disabled>스캔 영역 지정</button>
-      <button id="scanButton" disabled>현재 영역 스캔</button>
+      <button id="scanButton" disabled>공간 자동 스캔 (AI)</button>
       <button id="addPointButton" disabled>포인트 추가</button>
       <button id="deletePointButton" disabled>선택 포인트 삭제</button>
       <button id="resetButton" disabled>초기화</button>
@@ -54,12 +54,19 @@
       <div id="stageScroll" class="stage-scroll">
         <div id="stage" class="stage">
           <img id="bgImg" alt="배경 이미지">
+          
           <div id="mapped" class="mapped empty">
             <img id="mapImg" alt="파사드 이미지">
             <video id="mapVideo" muted loop playsinline></video>
           </div>
+          
           <svg id="overlay" class="overlay">
-            <polygon id="poly"></polygon>
+            <defs>
+              <clipPath id="maskClip">
+                <path id="clipPathData" d=""></path>
+              </clipPath>
+            </defs>
+            <path id="poly" d=""></path>
             <rect id="scanRect"></rect>
           </svg>
         </div>
