@@ -1,99 +1,41 @@
-<!doctype html>
-<html lang="ko">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Spatial Facade Mapper MVP</title>
-  <link rel="stylesheet" href="./style.css" />
-</head>
-<body>
-  <main class="app">
-    <header class="topbar">
-      <div>
-        <h1>Spatial Facade Mapper</h1>
-        <p>배경 공간을 불러오고, 파사드 콘텐츠를 선택한 뒤 네 꼭짓점으로 즉시 왜곡 매핑합니다.</p>
-      </div>
-    </header>
+<section class="controls">
+  <label>
+    배경 이미지
+    <select id="bgSelect">
+      <option value="">배경을 선택하세요</option>
+    </select>
+  </label>
 
-    <section id="dropZone" class="drop-zone">
-      <strong>이미지/영상 파일 또는 폴더를 여기로 드래그</strong>
-      <span>배경 이미지, 파사드 이미지/영상 파일을 한 번에 넣을 수 있습니다.</span>
+  <label>
+    파사드 콘텐츠
+    <select id="contentSelect">
+      <option value="">콘텐츠를 선택하세요</option>
+    </select>
+  </label>
 
-      <div class="file-actions">
-        <label>
-          파일 선택
-          <input id="fileInput" type="file" multiple accept="image/*,video/*" />
-        </label>
+  <button id="scanButton" disabled>공간 스캔</button>
+  <button id="addPointButton" disabled>포인트 추가 모드</button>
+  <button id="deletePointButton" disabled>포인트 삭제 모드</button>
+  <button id="resetQuadButton" disabled>포인트 초기화</button>
 
-        <label>
-          폴더 선택
-          <input id="folderInput" type="file" webkitdirectory directory multiple />
-        </label>
-      </div>
-    </section>
+  <label>
+    배경 크기
+    <input id="zoomSlider" type="range" min="30" max="160" value="100" />
+  </label>
+</section>
 
-    <section class="controls">
-      <label>
-        배경 이미지
-        <select id="bgSelect">
-          <option value="">배경을 선택하세요</option>
-        </select>
-      </label>
+<section class="workspace">
+  <div id="stageScroll" class="stage-scroll">
+    <div id="stage" class="stage">
+      <img id="backgroundImage" alt="배경 이미지" />
 
-      <label>
-        파사드 콘텐츠
-        <select id="contentSelect">
-          <option value="">콘텐츠를 선택하세요</option>
-        </select>
-      </label>
-
-      <button id="resetQuadButton" disabled>공간 핸들 초기화</button>
-      <button id="fitButton" disabled>중앙 영역에 맞추기</button>
-    </section>
-
-    <section class="workspace">
-      <div id="stage" class="stage">
-        <img id="backgroundImage" alt="배경 이미지" />
-
-        <div id="mappedLayer" class="mapped-layer is-empty">
-          <img id="mappedImage" alt="매핑 이미지" />
-          <video id="mappedVideo" muted loop playsinline></video>
-        </div>
-
-        <button class="handle" id="h0" aria-label="top left"></button>
-        <button class="handle" id="h1" aria-label="top right"></button>
-        <button class="handle" id="h2" aria-label="bottom right"></button>
-        <button class="handle" id="h3" aria-label="bottom left"></button>
+      <div id="mappedLayer" class="mapped-layer is-empty">
+        <img id="mappedImage" alt="매핑 이미지" />
+        <video id="mappedVideo" muted loop playsinline></video>
       </div>
 
-      <aside class="panel">
-        <h2>파일 목록</h2>
-        <div id="fileList" class="file-list"></div>
-
-        <h2>매핑 상태</h2>
-
-        <div class="stat">
-          <span>배경</span>
-          <strong id="bgInfo">없음</strong>
-        </div>
-
-        <div class="stat">
-          <span>콘텐츠</span>
-          <strong id="contentInfo">없음</strong>
-        </div>
-
-        <div class="stat">
-          <span>모드</span>
-          <strong id="modeInfo">대기</strong>
-        </div>
-
-        <p class="note">
-          현재 버전은 브라우저 미리보기용입니다. MP4 렌더/export는 다음 단계에서 붙입니다.
-        </p>
-      </aside>
-    </section>
-  </main>
-
-  <script src="./app.js"></script>
-</body>
-</html>
+      <svg id="overlaySvg" class="overlay-svg">
+        <polygon id="surfacePolygon"></polygon>
+      </svg>
+    </div>
+  </div>
