@@ -223,3 +223,20 @@ select {
     padding: 16px;
   }
 }
+#backgroundImage:not([src]),
+#mappedImage:not([src]),
+#mappedVideo:not([src]) {
+  display: none !important;
+}
+
+.mapped-layer.is-empty {
+  display: none !important;
+}
+
+.mapped-layer.is-active {
+  display: block;
+}
+
+#mappedVideo {
+  pointer-events: none;
+}
