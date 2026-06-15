@@ -1,277 +1,247 @@
-const dropZone = document.getElementById("dropZone");
-const fileInput = document.getElementById("fileInput");
-const folderInput = document.getElementById("folderInput");
+const $ = (id) => document.getElementById(id);
 
-const bgSelect = document.getElementById("bgSelect");
-const contentSelect = document.getElementById("contentSelect");
+const dropZone = $("dropZone");
+const fileInput = $("fileInput");
+const folderInput = $("folderInput");
+const bgSelect = $("bgSelect");
+const contentSelect = $("contentSelect");
+const scanAreaButton = $("scanAreaButton");
+const scanButton = $("scanButton");
+const addPointButton = $("addPointButton");
+const deletePointButton = $("deletePointButton");
+const resetButton = $("resetButton");
+const guideToggle = $("guideToggle");
+const zoomSlider = $("zoomSlider");
 
-const scanButton = document.getElementById("scanButton");
-const addPointButton = document.getElementById("addPointButton");
-const deletePointButton = document.getElementById("deletePointButton");
-const resetButton = document.getElementById("resetButton");
-const zoomSlider = document.getElementById("zoomSlider");
+const stage = $("stage");
+const bgImg = $("bgImg");
+const mapped = $("mapped");
+const mapImg = $("mapImg");
+const mapVideo = $("mapVideo");
+const overlay = $("overlay");
+const poly = $("poly");
+const scanRect = $("scanRect");
+const scanCanvas = $("scanCanvas");
 
-const stage = document.getElementById("stage");
-const bgImg = document.getElementById("bgImg");
-
-const mapped = document.getElementById("mapped");
-const mapImg = document.getElementById("mapImg");
-const mapVideo = document.getElementById("mapVideo");
-
-const svg = document.getElementById("svg");
-const poly = document.getElementById("poly");
-
-const fileList = document.getElementById("fileList");
-const bgInfo = document.getElementById("bgInfo");
-const contentInfo = document.getElementById("contentInfo");
-const modeInfo = document.getElementById("modeInfo");
+const fileList = $("fileList");
+const bgInfo = $("bgInfo");
+const contentInfo = $("contentInfo");
+const modeInfo = $("modeInfo");
 
 const files = [];
-
 let bgUrl = "";
 let contentUrl = "";
-let editMode = "move";
-let currentZoom = 1;
-let activePointIndex = -1;
+let zoom = 1;
+let mode = "move";
+let selectedPoint = -1;
+let dragPoint = -1;
+let scanStart = null;
+let scanBox = null;
 
 let points = [
-  { x: 160, y: 140 },
-  { x: 620, y: 140 },
-  { x: 620, y: 420 },
-  { x: 160, y: 420 },
+  { x: 200, y: 180 },
+  { x: 760, y: 180 },
+  { x: 760, y: 560 },
+  { x: 200, y: 560 },
 ];
 
-initialize();
+init();
 
-function initialize() {
+function init() {
   mapped.classList.add("empty");
-
-  fileInput.addEventListener("change", handleFileInput);
-  folderInput.addEventListener("change", handleFolderInput);
-
-  dropZone.addEventListener("dragover", handleDragOver);
-  dropZone.addEventListener("dragleave", handleDragLeave);
-  dropZone.addEventListener("drop", handleDrop);
-
-  bgSelect.addEventListener("change", handleBackgroundSelect);
-  contentSelect.addEventListener("change", handleContentSelect);
-
-  scanButton.addEventListener("click", handleScan);
-  addPointButton.addEventListener("click", toggleAddMode);
-  deletePointButton.addEventListener("click", toggleDeleteMode);
-  resetButton.addEventListener("click", resetPoints);
-  zoomSlider.addEventListener("input", handleZoom);
-
-  stage.addEventListener("click", handleStageClick);
-
-  refreshFileUI();
-  renderPoints();
+  bindFileEvents();
+  bindUiEvents();
+  bindStageEvents();
+  refreshLists();
+  render();
 }
 
-function handleFileInput(event) {
-  addFiles(Array.from(event.target.files || []));
-  fileInput.value = "";
+function bindFileEvents() {
+  fileInput.onchange = (e) => {
+    addFiles([...e.target.files]);
+    fileInput.value = "";
+  };
+
+  folderInput.onchange = (e) => {
+    addFiles([...e.target.files]);
+    folderInput.value = "";
+  };
+
+  ["dragenter", "dragover"].forEach((name) => {
+    window.addEventListener(name, (e) => {
+      e.preventDefault();
+      dropZone.classList.add("over");
+    });
+  });
+
+  ["dragleave", "drop"].forEach((name) => {
+    window.addEventListener(name, (e) => {
+      e.preventDefault();
+      if (name === "drop") handleDrop(e);
+      dropZone.classList.remove("over");
+    });
+  });
 }
 
-function handleFolderInput(event) {
-  addFiles(Array.from(event.target.files || []));
-  folderInput.value = "";
-}
+async function handleDrop(e) {
+  const dropped = [];
+  const items = [...(e.dataTransfer.items || [])];
 
-function handleDragOver(event) {
-  event.preventDefault();
-  dropZone.classList.add("over");
-}
-
-function handleDragLeave() {
-  dropZone.classList.remove("over");
-}
-
-async function handleDrop(event) {
-  event.preventDefault();
-  dropZone.classList.remove("over");
-
-  const droppedFiles = [];
-
-  if (event.dataTransfer.items && event.dataTransfer.items.length > 0) {
-    const items = Array.from(event.dataTransfer.items);
-
+  if (items.length && items[0].webkitGetAsEntry) {
     for (const item of items) {
-      const entry = item.webkitGetAsEntry ? item.webkitGetAsEntry() : null;
-
-      if (entry) {
-        const entryFiles = await readEntry(entry);
-        droppedFiles.push(...entryFiles);
-      } else {
-        const file = item.getAsFile ? item.getAsFile() : null;
-        if (file) droppedFiles.push(file);
-      }
+      const entry = item.webkitGetAsEntry();
+      if (entry) dropped.push(...await readEntry(entry));
     }
   } else {
-    droppedFiles.push(...Array.from(event.dataTransfer.files || []));
+    dropped.push(...(e.dataTransfer.files || []));
   }
 
-  addFiles(droppedFiles);
+  addFiles(dropped);
 }
 
-function handleBackgroundSelect() {
-  const index = Number(bgSelect.value);
-  if (!Number.isNaN(index) && files[index]) {
-    setBackground(files[index]);
-  }
+function bindUiEvents() {
+  bgSelect.onchange = () => files[+bgSelect.value] && setBackground(files[+bgSelect.value]);
+  contentSelect.onchange = () => files[+contentSelect.value] && setContent(files[+contentSelect.value]);
+
+  scanAreaButton.onclick = () => {
+    mode = mode === "scanArea" ? "move" : "scanArea";
+    modeInfo.textContent = mode === "scanArea" ? "스캔 영역 드래그" : "이동";
+  };
+
+  scanButton.onclick = () => {
+    scanCurrentArea();
+    render();
+    updateMappedArea();
+  };
+
+  addPointButton.onclick = () => {
+    mode = mode === "add" ? "move" : "add";
+    modeInfo.textContent = mode === "add" ? "포인트 추가" : "이동";
+    render();
+  };
+
+  deletePointButton.onclick = () => {
+    if (selectedPoint >= 0 && points.length > 4) {
+      points.splice(selectedPoint, 1);
+      selectedPoint = -1;
+      points = sortClockwise(points);
+      render();
+      updateMappedArea();
+    }
+  };
+
+  resetButton.onclick = () => {
+    fitDefaultPoints();
+    selectedPoint = -1;
+    scanBox = null;
+    modeInfo.textContent = "초기화";
+    render();
+    updateMappedArea();
+  };
+
+  guideToggle.onchange = () => {
+    stage.classList.toggle("hide-guides", !guideToggle.checked);
+  };
+
+  zoomSlider.oninput = () => {
+    zoom = +zoomSlider.value / 100;
+    stage.style.transform = `scale(${zoom})`;
+  };
+
+  window.addEventListener("keydown", handleKeyMove);
 }
 
-function handleContentSelect() {
-  const index = Number(contentSelect.value);
-  if (!Number.isNaN(index) && files[index]) {
-    setContent(files[index]);
-  }
-}
+function bindStageEvents() {
+  stage.addEventListener("pointerdown", (e) => {
+    const pos = getStagePos(e);
 
-function handleScan() {
-  if (!bgImg.src) return;
+    if (mode === "scanArea") {
+      scanStart = pos;
+      scanBox = { x: pos.x, y: pos.y, w: 1, h: 1 };
+      render();
+      return;
+    }
 
-  const width = bgImg.naturalWidth;
-  const height = bgImg.naturalHeight;
+    if (mode === "add" && e.target === overlay) {
+      points.push(pos);
+      points = sortClockwise(points);
+      selectedPoint = points.length - 1;
+      render();
+      updateMappedArea();
+    }
+  });
 
-  points = [
-    { x: width * 0.18, y: height * 0.18 },
-    { x: width * 0.82, y: height * 0.18 },
-    { x: width * 0.82, y: height * 0.82 },
-    { x: width * 0.18, y: height * 0.82 },
-  ];
+  stage.addEventListener("pointermove", (e) => {
+    if (scanStart) {
+      const pos = getStagePos(e);
+      scanBox = normalizeBox(scanStart, pos);
+      render();
+    }
 
-  modeInfo.textContent = "스캔 후보 적용";
-  renderPoints();
-  updateMapping();
-}
+    if (dragPoint >= 0) {
+      points[dragPoint] = getStagePos(e);
+      selectedPoint = dragPoint;
+      render();
+      updateMappedArea();
+    }
+  });
 
-function toggleAddMode() {
-  if (editMode === "add") {
-    editMode = "move";
-    addPointButton.textContent = "포인트 추가";
-    modeInfo.textContent = "이동";
-  } else {
-    editMode = "add";
-    addPointButton.textContent = "포인트 추가 중";
-    deletePointButton.textContent = "포인트 삭제";
-    modeInfo.textContent = "포인트 추가";
-  }
+  stage.addEventListener("pointerup", () => {
+    if (scanStart) {
+      modeInfo.textContent = "스캔 영역 지정됨";
+      scanStart = null;
+    }
 
-  renderPoints();
-}
-
-function toggleDeleteMode() {
-  if (editMode === "delete") {
-    editMode = "move";
-    deletePointButton.textContent = "포인트 삭제";
-    modeInfo.textContent = "이동";
-  } else {
-    editMode = "delete";
-    deletePointButton.textContent = "포인트 삭제 중";
-    addPointButton.textContent = "포인트 추가";
-    modeInfo.textContent = "포인트 삭제";
-  }
-
-  renderPoints();
-}
-
-function resetPoints() {
-  if (!bgImg.src) return;
-
-  fitPointsToBackground();
-  modeInfo.textContent = "초기화";
-  renderPoints();
-  updateMapping();
-}
-
-function handleZoom() {
-  currentZoom = Number(zoomSlider.value) / 100;
-  stage.style.transform = `scale(${currentZoom})`;
-}
-
-function handleStageClick(event) {
-  if (editMode !== "add") return;
-  if (event.target.classList.contains("pt")) return;
-
-  const position = getStagePositionFromEvent(event);
-
-  points.push(position);
-  points = sortPointsClockwise(points);
-
-  renderPoints();
-  updateMapping();
+    dragPoint = -1;
+  });
 }
 
 function addFiles(newFiles) {
-  const validFiles = newFiles.filter((file) => {
+  const valid = newFiles.filter((file) => {
     return file && (file.type.startsWith("image/") || file.type.startsWith("video/"));
   });
 
-  for (const file of validFiles) {
-    const exists = files.some((item) => {
-      return item.name === file.name &&
-        item.size === file.size &&
-        item.type === file.type;
-    });
-
+  valid.forEach((file) => {
+    const exists = files.some((item) => item.name === file.name && item.size === file.size);
     if (!exists) files.push(file);
-  }
+  });
 
-  refreshFileUI();
-  autoSelectFirstFiles();
+  refreshLists();
+  autoApplyFiles();
 }
 
-function refreshFileUI() {
-  bgSelect.innerHTML = "";
-  contentSelect.innerHTML = "";
+function refreshLists() {
+  bgSelect.innerHTML = '<option value="">배경 선택</option>';
+  contentSelect.innerHTML = '<option value="">콘텐츠 선택</option>';
   fileList.innerHTML = "";
 
-  bgSelect.appendChild(createOption("", "배경을 선택하세요"));
-  contentSelect.appendChild(createOption("", "콘텐츠를 선택하세요"));
-
   files.forEach((file, index) => {
-    const typeLabel = file.type.startsWith("video/") ? "VIDEO" : "IMAGE";
+    const type = file.type.startsWith("video/") ? "VIDEO" : "IMAGE";
     const name = file.webkitRelativePath || file.name;
-    const label = `${typeLabel} - ${name}`;
+    const label = `${type} - ${name}`;
 
-    if (file.type.startsWith("image/")) {
-      bgSelect.appendChild(createOption(String(index), label));
-    }
+    if (file.type.startsWith("image/")) bgSelect.add(new Option(label, index));
+    contentSelect.add(new Option(label, index));
 
-    contentSelect.appendChild(createOption(String(index), label));
-
-    const item = document.createElement("div");
-    item.textContent = label;
-    fileList.appendChild(item);
+    const row = document.createElement("div");
+    row.textContent = label;
+    fileList.appendChild(row);
   });
 }
 
-function createOption(value, text) {
-  const option = document.createElement("option");
-  option.value = value;
-  option.textContent = text;
-  return option;
-}
+function autoApplyFiles() {
+  const firstImage = files.findIndex((f) => f.type.startsWith("image/"));
+  const firstContent = files.findIndex((f, i) => i !== firstImage);
 
-function autoSelectFirstFiles() {
-  const firstImageIndex = files.findIndex((file) => file.type.startsWith("image/"));
-
-  const firstContentIndex = files.findIndex((file, index) => {
-    return index !== firstImageIndex &&
-      (file.type.startsWith("image/") || file.type.startsWith("video/"));
-  });
-
-  if (!bgImg.getAttribute("src") && firstImageIndex >= 0) {
-    bgSelect.value = String(firstImageIndex);
-    setBackground(files[firstImageIndex]);
+  if (!bgImg.getAttribute("src") && firstImage >= 0) {
+    bgSelect.value = firstImage;
+    setBackground(files[firstImage]);
   }
 
   if (!contentUrl) {
-    const index = firstContentIndex >= 0 ? firstContentIndex : firstImageIndex;
-
+    const index = firstContent >= 0 ? firstContent : firstImage;
     if (index >= 0) {
-      contentSelect.value = String(index);
+      contentSelect.value = index;
       setContent(files[index]);
     }
   }
@@ -279,24 +249,21 @@ function autoSelectFirstFiles() {
 
 function setBackground(file) {
   if (bgUrl) URL.revokeObjectURL(bgUrl);
-
   bgUrl = URL.createObjectURL(file);
 
-  bgImg.onload = function () {
+  bgImg.onload = () => {
     stage.style.width = `${bgImg.naturalWidth}px`;
     stage.style.height = `${bgImg.naturalHeight}px`;
 
-    svg.setAttribute("width", bgImg.naturalWidth);
-    svg.setAttribute("height", bgImg.naturalHeight);
-    svg.setAttribute("viewBox", `0 0 ${bgImg.naturalWidth} ${bgImg.naturalHeight}`);
+    overlay.setAttribute("width", bgImg.naturalWidth);
+    overlay.setAttribute("height", bgImg.naturalHeight);
+    overlay.setAttribute("viewBox", `0 0 ${bgImg.naturalWidth} ${bgImg.naturalHeight}`);
 
     bgInfo.textContent = file.name;
-    modeInfo.textContent = "배경 적용";
-
-    fitPointsToBackground();
-    enableWorkspaceButtons();
-    renderPoints();
-    updateMapping();
+    fitDefaultPoints();
+    enableButtons();
+    render();
+    updateMappedArea();
   };
 
   bgImg.src = bgUrl;
@@ -304,14 +271,11 @@ function setBackground(file) {
 
 function setContent(file) {
   if (contentUrl) URL.revokeObjectURL(contentUrl);
-
   contentUrl = URL.createObjectURL(file);
 
   mapped.classList.remove("empty");
-
   mapImg.style.display = "none";
   mapVideo.style.display = "none";
-
   mapImg.removeAttribute("src");
   mapVideo.pause();
   mapVideo.removeAttribute("src");
@@ -320,288 +284,242 @@ function setContent(file) {
   if (file.type.startsWith("video/")) {
     mapVideo.src = contentUrl;
     mapVideo.style.display = "block";
-    mapVideo.muted = true;
-    mapVideo.loop = true;
-    mapVideo.playsInline = true;
-
-    mapVideo.play().catch(function () {
-      modeInfo.textContent = "영상 선택됨";
-    });
-
-    modeInfo.textContent = "영상 매핑";
+    mapVideo.play().catch(() => {});
+    modeInfo.textContent = "영상 적용";
   } else {
     mapImg.src = contentUrl;
     mapImg.style.display = "block";
-    modeInfo.textContent = "이미지 매핑";
+    modeInfo.textContent = "이미지 적용";
   }
 
   contentInfo.textContent = file.name;
-  updateMapping();
+  updateMappedArea();
 }
 
-function enableWorkspaceButtons() {
-  scanButton.disabled = false;
-  addPointButton.disabled = false;
-  deletePointButton.disabled = false;
-  resetButton.disabled = false;
+function enableButtons() {
+  [scanAreaButton, scanButton, addPointButton, deletePointButton, resetButton].forEach((b) => {
+    b.disabled = false;
+  });
 }
 
-function fitPointsToBackground() {
-  const width = bgImg.naturalWidth;
-  const height = bgImg.naturalHeight;
-
+function fitDefaultPoints() {
+  const w = bgImg.naturalWidth;
+  const h = bgImg.naturalHeight;
   points = [
-    { x: width * 0.2, y: height * 0.25 },
-    { x: width * 0.75, y: height * 0.25 },
-    { x: width * 0.75, y: height * 0.75 },
-    { x: width * 0.2, y: height * 0.75 },
+    { x: w * 0.2, y: h * 0.22 },
+    { x: w * 0.8, y: h * 0.22 },
+    { x: w * 0.8, y: h * 0.78 },
+    { x: w * 0.2, y: h * 0.78 },
   ];
 }
 
-function renderPoints() {
-  const oldHandles = stage.querySelectorAll(".pt");
-  oldHandles.forEach((handle) => handle.remove());
+function render() {
+  stage.querySelectorAll(".pt").forEach((el) => el.remove());
 
-  poly.setAttribute(
-    "points",
-    points.map((point) => `${point.x},${point.y}`).join(" ")
-  );
+  poly.setAttribute("points", points.map((p) => `${p.x},${p.y}`).join(" "));
+
+  if (scanBox) {
+    scanRect.style.display = "block";
+    scanRect.setAttribute("x", scanBox.x);
+    scanRect.setAttribute("y", scanBox.y);
+    scanRect.setAttribute("width", scanBox.w);
+    scanRect.setAttribute("height", scanBox.h);
+  } else {
+    scanRect.style.display = "none";
+  }
 
   points.forEach((point, index) => {
     const handle = document.createElement("button");
     handle.className = "pt";
-
-    if (editMode === "delete") {
-      handle.classList.add("del");
-    }
-
+    if (index === selectedPoint) handle.classList.add("selected");
     handle.style.left = `${point.x}px`;
     handle.style.top = `${point.y}px`;
-    handle.title = `Point ${index + 1}`;
 
-    handle.addEventListener("pointerdown", function (event) {
-      event.stopPropagation();
-      event.preventDefault();
-
-      if (editMode === "delete") {
-        if (points.length <= 4) {
-          modeInfo.textContent = "최소 4점 필요";
-          return;
-        }
-
-        points.splice(index, 1);
-        points = sortPointsClockwise(points);
-        renderPoints();
-        updateMapping();
-        return;
-      }
-
-      activePointIndex = index;
-      window.addEventListener("pointermove", handlePointMove);
-      window.addEventListener("pointerup", handlePointUp);
-    });
+    handle.onpointerdown = (e) => {
+      e.stopPropagation();
+      selectedPoint = index;
+      dragPoint = index;
+      render();
+    };
 
     stage.appendChild(handle);
   });
 }
 
-function handlePointMove(event) {
-  if (activePointIndex < 0) return;
+function updateMappedArea() {
+  if (!bgImg.src || points.length < 3) return;
 
-  points[activePointIndex] = getStagePositionFromEvent(event);
-  points = sortPointsClockwise(points);
+  const box = getBounds(points);
+  mapped.style.left = `${box.x}px`;
+  mapped.style.top = `${box.y}px`;
+  mapped.style.width = `${box.w}px`;
+  mapped.style.height = `${box.h}px`;
 
-  renderPoints();
-  updateMapping();
+  const clip = points.map((p) => `${p.x - box.x}px ${p.y - box.y}px`).join(", ");
+  mapped.style.clipPath = `polygon(${clip})`;
 }
 
-function handlePointUp() {
-  activePointIndex = -1;
-  window.removeEventListener("pointermove", handlePointMove);
-  window.removeEventListener("pointerup", handlePointUp);
+function scanCurrentArea() {
+  if (!bgImg.src) return;
+
+  const box = scanBox || getBounds(points);
+  const canvas = scanCanvas;
+  const ctx = canvas.getContext("2d", { willReadFrequently: true });
+
+  canvas.width = bgImg.naturalWidth;
+  canvas.height = bgImg.naturalHeight;
+  ctx.drawImage(bgImg, 0, 0);
+
+  const x0 = Math.max(0, Math.floor(box.x));
+  const y0 = Math.max(0, Math.floor(box.y));
+  const w = Math.max(2, Math.floor(box.w));
+  const h = Math.max(2, Math.floor(box.h));
+  const image = ctx.getImageData(x0, y0, w, h);
+  const data = image.data;
+
+  let total = 0;
+  for (let i = 0; i < data.length; i += 4) {
+    total += (data[i] + data[i + 1] + data[i + 2]) / 3;
+  }
+
+  const avg = total / (data.length / 4);
+  const rows = 9;
+  const left = [];
+  const right = [];
+
+  for (let r = 0; r < rows; r++) {
+    const y = Math.floor((h - 1) * (r / (rows - 1)));
+    let minX = null;
+    let maxX = null;
+
+    for (let x = 0; x < w; x++) {
+      const i = (y * w + x) * 4;
+      const b = (data[i] + data[i + 1] + data[i + 2]) / 3;
+      const hit = b < avg - 18 || b < 95;
+
+      if (hit) {
+        if (minX === null) minX = x;
+        maxX = x;
+      }
+    }
+
+    if (minX !== null && maxX !== null && maxX - minX > w * 0.12) {
+      left.push({ x: x0 + minX, y: y0 + y });
+      right.push({ x: x0 + maxX, y: y0 + y });
+    }
+  }
+
+  if (left.length >= 2 && right.length >= 2) {
+    points = [...left, ...right.reverse()];
+    points = simplifyPoints(points, 12);
+    modeInfo.textContent = "영역 스캔 적용";
+  } else {
+    points = [
+      { x: x0, y: y0 },
+      { x: x0 + w, y: y0 },
+      { x: x0 + w, y: y0 + h },
+      { x: x0, y: y0 + h },
+    ];
+    modeInfo.textContent = "스캔 실패 - 영역 기준 적용";
+  }
+
+  selectedPoint = -1;
 }
 
-function getStagePositionFromEvent(event) {
+function handleKeyMove(e) {
+  if (selectedPoint < 0) return;
+
+  const step = e.shiftKey ? 10 : 1;
+  const p = points[selectedPoint];
+
+  if (e.key === "ArrowLeft") p.x -= step;
+  else if (e.key === "ArrowRight") p.x += step;
+  else if (e.key === "ArrowUp") p.y -= step;
+  else if (e.key === "ArrowDown") p.y += step;
+  else if (e.key === "Delete" && points.length > 4) {
+    points.splice(selectedPoint, 1);
+    selectedPoint = -1;
+  } else {
+    return;
+  }
+
+  e.preventDefault();
+  render();
+  updateMappedArea();
+}
+
+function getStagePos(e) {
   const rect = stage.getBoundingClientRect();
-
   return {
-    x: clamp((event.clientX - rect.left) / currentZoom, 0, bgImg.naturalWidth),
-    y: clamp((event.clientY - rect.top) / currentZoom, 0, bgImg.naturalHeight),
+    x: clamp((e.clientX - rect.left) / zoom, 0, bgImg.naturalWidth || 99999),
+    y: clamp((e.clientY - rect.top) / zoom, 0, bgImg.naturalHeight || 99999),
   };
 }
 
-function updateMapping() {
-  if (!bgImg.src || points.length < 4) return;
-
-  const sourceWidth = 320;
-  const sourceHeight = 180;
-  const quad = getBoundingQuadFromPoints();
-
-  const matrix = getProjectiveTransform(
-    [
-      { x: 0, y: 0 },
-      { x: sourceWidth, y: 0 },
-      { x: sourceWidth, y: sourceHeight },
-      { x: 0, y: sourceHeight },
-    ],
-    quad
-  );
-
-  mapped.style.width = `${sourceWidth}px`;
-  mapped.style.height = `${sourceHeight}px`;
-  mapped.style.transform = matrixToCss(matrix);
-
-  const clipPolygon = points.map((point) => `${point.x}px ${point.y}px`).join(", ");
-  mapped.style.clipPath = `polygon(${clipPolygon})`;
+function normalizeBox(a, b) {
+  return {
+    x: Math.min(a.x, b.x),
+    y: Math.min(a.y, b.y),
+    w: Math.abs(a.x - b.x),
+    h: Math.abs(a.y - b.y),
+  };
 }
 
-function getBoundingQuadFromPoints() {
-  const xs = points.map((point) => point.x);
-  const ys = points.map((point) => point.y);
-
-  const minX = Math.min.apply(null, xs);
-  const maxX = Math.max.apply(null, xs);
-  const minY = Math.min.apply(null, ys);
-  const maxY = Math.max.apply(null, ys);
-
-  return [
-    { x: minX, y: minY },
-    { x: maxX, y: minY },
-    { x: maxX, y: maxY },
-    { x: minX, y: maxY },
-  ];
+function getBounds(arr) {
+  const xs = arr.map((p) => p.x);
+  const ys = arr.map((p) => p.y);
+  const x = Math.min(...xs);
+  const y = Math.min(...ys);
+  return {
+    x,
+    y,
+    w: Math.max(...xs) - x,
+    h: Math.max(...ys) - y,
+  };
 }
 
-function sortPointsClockwise(inputPoints) {
-  const center = inputPoints.reduce(function (acc, point) {
-    return {
-      x: acc.x + point.x / inputPoints.length,
-      y: acc.y + point.y / inputPoints.length,
-    };
-  }, { x: 0, y: 0 });
-
-  return inputPoints.slice().sort(function (a, b) {
-    const angleA = Math.atan2(a.y - center.y, a.x - center.x);
-    const angleB = Math.atan2(b.y - center.y, b.x - center.x);
-    return angleA - angleB;
-  });
+function sortClockwise(arr) {
+  const c = arr.reduce((a, p) => ({ x: a.x + p.x / arr.length, y: a.y + p.y / arr.length }), { x: 0, y: 0 });
+  return arr.slice().sort((a, b) => Math.atan2(a.y - c.y, a.x - c.x) - Math.atan2(b.y - c.y, b.x - c.x));
 }
 
-function getProjectiveTransform(sourcePoints, targetPoints) {
-  const matrix = [];
-  const vector = [];
-
-  for (let i = 0; i < 4; i++) {
-    const x = sourcePoints[i].x;
-    const y = sourcePoints[i].y;
-    const u = targetPoints[i].x;
-    const v = targetPoints[i].y;
-
-    matrix.push([x, y, 1, 0, 0, 0, -u * x, -u * y]);
-    vector.push(u);
-
-    matrix.push([0, 0, 0, x, y, 1, -v * x, -v * y]);
-    vector.push(v);
+function simplifyPoints(arr, max) {
+  if (arr.length <= max) return arr;
+  const result = [];
+  for (let i = 0; i < max; i++) {
+    result.push(arr[Math.floor(i * arr.length / max)]);
   }
-
-  const h = solveLinearSystem(matrix, vector);
-  h.push(1);
-
-  return h;
-}
-
-function matrixToCss(h) {
-  return `matrix3d(
-    ${h[0]}, ${h[3]}, 0, ${h[6]},
-    ${h[1]}, ${h[4]}, 0, ${h[7]},
-    0, 0, 1, 0,
-    ${h[2]}, ${h[5]}, 0, ${h[8]}
-  )`;
-}
-
-function solveLinearSystem(matrix, vector) {
-  const n = vector.length;
-
-  for (let i = 0; i < n; i++) {
-    let maxRow = i;
-
-    for (let k = i + 1; k < n; k++) {
-      if (Math.abs(matrix[k][i]) > Math.abs(matrix[maxRow][i])) {
-        maxRow = k;
-      }
-    }
-
-    const tempRow = matrix[i];
-    matrix[i] = matrix[maxRow];
-    matrix[maxRow] = tempRow;
-
-    const tempValue = vector[i];
-    vector[i] = vector[maxRow];
-    vector[maxRow] = tempValue;
-
-    const pivot = matrix[i][i] || 1e-12;
-
-    for (let k = i + 1; k < n; k++) {
-      const factor = matrix[k][i] / pivot;
-
-      for (let j = i; j < n; j++) {
-        matrix[k][j] -= factor * matrix[i][j];
-      }
-
-      vector[k] -= factor * vector[i];
-    }
-  }
-
-  const result = new Array(n).fill(0);
-
-  for (let i = n - 1; i >= 0; i--) {
-    let sum = vector[i];
-
-    for (let j = i + 1; j < n; j++) {
-      sum -= matrix[i][j] * result[j];
-    }
-
-    result[i] = sum / (matrix[i][i] || 1e-12);
-  }
-
   return result;
 }
 
-function clamp(value, min, max) {
-  return Math.max(min, Math.min(max, value));
+function clamp(v, min, max) {
+  return Math.max(min, Math.min(max, v));
 }
 
 function readEntry(entry) {
-  return new Promise(function (resolve) {
+  return new Promise((resolve) => {
     if (entry.isFile) {
-      entry.file(function (file) {
-        resolve([file]);
-      }, function () {
-        resolve([]);
-      });
+      entry.file((file) => resolve([file]), () => resolve([]));
       return;
     }
 
     if (entry.isDirectory) {
       const reader = entry.createReader();
-      const allFiles = [];
+      const all = [];
 
       function readBatch() {
-        reader.readEntries(async function (entries) {
+        reader.readEntries(async (entries) => {
           if (!entries.length) {
-            resolve(allFiles);
+            resolve(all);
             return;
           }
 
           for (const child of entries) {
-            const childFiles = await readEntry(child);
-            allFiles.push(...childFiles);
+            all.push(...await readEntry(child));
           }
 
           readBatch();
-        }, function () {
-          resolve(allFiles);
-        });
+        }, () => resolve(all));
       }
 
       readBatch();
