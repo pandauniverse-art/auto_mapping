@@ -1,225 +1,768 @@
 <!DOCTYPE html>
 <html lang="ko">
 <head>
-    <meta charset="UTF-8">
-    <title>미디어 파사드 현장 목업 자동 합성기</title>
-    <style>
-        body {
-            background-color: #0f172a; color: #f8fafc; font-family: system-ui, sans-serif;
-            margin: 0; padding: 20px; display: flex; flex-direction: column; align-items: center;
-        }
-        h1 { color: #38bdf8; margin-bottom: 5px; }
-        .container { display: flex; gap: 20px; max-width: 1400px; width: 100%; margin-top: 20px; }
-        .control-panel { flex: 1; background: #1e293b; padding: 20px; border-radius: 12px; box-shadow: 0 4px 10px rgba(0,0,0,0.5); }
-        .view-panel { flex: 2.5; background: #020617; padding: 20px; border-radius: 12px; position: relative; display: flex; justify-content: center; align-items: center; }
-        input[type="file"], input[type="range"], select { width: 100%; padding: 10px; margin: 8px 0 20px 0; background: #0f172a; color: #fff; border: 1px solid #475569; border-radius: 6px; box-sizing: border-box; }
-        label { font-weight: bold; color: #94a3b8; font-size: 14px; }
-        .value-disp { color: #38bdf8; font-weight: bold; }
-        #canvas-container { position: relative; box-shadow: 0 0 20px rgba(0,0,0,0.8); }
-        canvas { display: block; border-radius: 4px; }
-        .control-point {
-            position: absolute; width: 16px; height: 16px; background: #38bdf8;
-            border: 2px solid #fff; border-radius: 50%; cursor: move;
-            transform: translate(-8px, -8px); box-shadow: 0 0 10px rgba(56, 189, 248, 0.8);
-            z-index: 10;
-        }
-        .section-title { border-bottom: 1px solid #334155; margin: 20px 0 15px 0; padding-bottom: 8px; color: #38bdf8; font-size: 1.1em; font-weight: bold; }
-    </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SPATIAL MAPPER</title>
+<style>
+:root {
+  --bg0:#060A0F; --bg1:#0D1117; --bg2:#111820; --bg3:#162030;
+  --bd:#1E3448; --bhi:#2A4A6A;
+  --ac:#00C8FF; --ac2:#7B5EFF; --ac3:#FF4D8F;
+  --t1:#E8F4FF; --t2:#7A9BB5; --t3:#3A5570;
+  --ok:#00FFB0; --wn:#FFB300;
+  --mono:'Courier New',monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;overflow:hidden;background:var(--bg0);color:var(--t1);font-family:'Segoe UI',system-ui,sans-serif;font-size:13px}
+body{display:flex;flex-direction:column}
+
+/* 헤더 */
+#hdr{height:46px;background:var(--bg1);border-bottom:1px solid var(--bd);display:flex;align-items:center;padding:0 18px;gap:14px;flex-shrink:0}
+.logo{font-family:var(--mono);font-size:11px;font-weight:700;letter-spacing:.22em;color:var(--ac)}
+.logo em{color:var(--t3);font-style:normal}
+.badge{font-family:var(--mono);font-size:9px;padding:2px 7px;border:1px solid var(--ac2);color:var(--ac2);border-radius:2px;letter-spacing:.12em}
+.sp{flex:1}
+#hfps{font-family:var(--mono);font-size:10px;color:var(--t3)}
+
+/* 메인 */
+#main{display:flex;flex:1;overflow:hidden}
+
+/* 왼쪽 패널 */
+#lp{width:252px;min-width:252px;background:var(--bg1);border-right:1px solid var(--bd);display:flex;flex-direction:column;overflow-y:auto;flex-shrink:0}
+.sec{padding:13px 14px;border-bottom:1px solid var(--bd)}
+.lbl{font-family:var(--mono);font-size:9px;letter-spacing:.18em;color:var(--t3);text-transform:uppercase;margin-bottom:10px;display:flex;align-items:center;gap:7px}
+.lbl::after{content:'';flex:1;height:1px;background:var(--bd)}
+
+/* 파일 슬롯 — label로 직접 감싸서 클릭 100% 보장 */
+.slot-wrap{margin-bottom:8px}
+.slot-wrap input[type=file]{display:none}
+.slot{display:block;background:var(--bg2);border:1.5px dashed var(--bhi);border-radius:6px;padding:14px 13px;cursor:pointer;transition:border-color .15s,background .15s;position:relative}
+.slot:hover,.slot:focus-within{border-color:var(--ac);background:rgba(0,200,255,.05)}
+.slot.loaded{border-style:solid;border-color:var(--ac)}
+.slot.dragover{border-color:var(--ac3);background:rgba(255,77,143,.07)}
+.slot-letter{font-family:var(--mono);font-size:20px;font-weight:700;color:var(--bhi);line-height:1;margin-bottom:3px;transition:color .15s}
+.slot.loaded .slot-letter{color:var(--ac)}
+.slot-desc{font-size:11px;color:var(--t2);line-height:1.4}
+.slot-fn{font-family:var(--mono);font-size:9px;color:var(--ok);margin-top:5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.slot-hint{font-family:var(--mono);font-size:9px;color:var(--t3);margin-top:5px}
+.dot{width:6px;height:6px;border-radius:50%;background:var(--t3);display:inline-block;margin-right:5px;transition:background .2s}
+.dot.on{background:var(--ok);box-shadow:0 0 5px var(--ok)}
+
+/* PIN 좌표 */
+.pins{display:grid;grid-template-columns:1fr 1fr;gap:5px;margin-bottom:8px}
+.pi{background:var(--bg2);border:1px solid var(--bd);border-radius:4px;padding:6px 8px;cursor:pointer;transition:border-color .15s}
+.pi:hover{border-color:var(--ac)}
+.pi.sel{border-color:var(--ac3)}
+.pi-lbl{font-family:var(--mono);font-size:9px;color:var(--t3);margin-bottom:2px}
+.pi-xy{font-family:var(--mono);font-size:10px;color:var(--t2)}
+.pi.sel .pi-xy{color:var(--ac3)}
+
+/* 슬라이더 */
+.cr{margin-bottom:11px}
+.ch{display:flex;justify-content:space-between;margin-bottom:5px;font-size:11px;color:var(--t2)}
+.cv{font-family:var(--mono);font-size:10px;color:var(--ac)}
+input[type=range]{width:100%;height:3px;appearance:none;background:var(--bd);border-radius:2px;outline:none;cursor:pointer}
+input[type=range]::-webkit-slider-thumb{appearance:none;width:13px;height:13px;border-radius:50%;background:var(--ac);border:2px solid var(--bg1);cursor:pointer}
+input[type=range].r2::-webkit-slider-thumb{background:var(--ac2)}
+input[type=range].r3::-webkit-slider-thumb{background:var(--ac3)}
+
+/* 버튼 */
+.btn{width:100%;padding:8px 10px;background:transparent;border:1px solid var(--bhi);border-radius:4px;color:var(--t2);font-family:var(--mono);font-size:10px;letter-spacing:.08em;text-transform:uppercase;cursor:pointer;transition:all .15s;margin-bottom:7px;display:flex;align-items:center;justify-content:center;gap:7px}
+.btn:hover{border-color:var(--ac);color:var(--ac);background:rgba(0,200,255,.05)}
+.btn.pri{border-color:var(--ac);color:var(--ac);background:rgba(0,200,255,.07)}
+.btn.pri:hover{background:rgba(0,200,255,.15)}
+.btn.red{border-color:var(--ac3);color:var(--ac3)}
+.btn.red:hover{background:rgba(255,77,143,.08)}
+.btn:disabled{opacity:.3;cursor:not-allowed;pointer-events:none}
+
+select{width:100%;background:var(--bg2);border:1px solid var(--bhi);border-radius:4px;color:var(--t1);font-family:var(--mono);font-size:10px;padding:7px 9px;margin-bottom:7px;outline:none;cursor:pointer}
+select:focus{border-color:var(--ac)}
+.cres{display:none;gap:5px;margin-bottom:7px}
+.cres.show{display:flex}
+.cres input{flex:1;background:var(--bg2);border:1px solid var(--bhi);border-radius:4px;color:var(--t1);font-family:var(--mono);font-size:10px;padding:7px 7px;outline:none}
+.cres input:focus{border-color:var(--ac)}
+.cres span{color:var(--t3);line-height:30px}
+
+/* 뷰어 */
+#viewer{flex:1;background:#040608;position:relative;overflow:hidden;display:flex;align-items:center;justify-content:center}
+#cbg,#cmain{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);display:block}
+#empty{display:flex;flex-direction:column;align-items:center;gap:10px;pointer-events:none;z-index:1}
+.ecross{width:56px;height:56px;position:relative;opacity:.12}
+.ecross::before,.ecross::after{content:'';position:absolute;background:var(--ac)}
+.ecross::before{width:1px;height:100%;left:50%}
+.ecross::after{height:1px;width:100%;top:50%}
+.etxt{font-family:var(--mono);font-size:10px;color:var(--t3);letter-spacing:.1em;text-transform:uppercase}
+
+/* 오른쪽 패널 */
+#rp{width:210px;min-width:210px;background:var(--bg1);border-left:1px solid var(--bd);display:flex;flex-direction:column;overflow-y:auto;flex-shrink:0}
+#pvcvs{width:100%;aspect-ratio:16/9;background:var(--bg0);display:block;border-bottom:1px solid var(--bd)}
+.inforow{font-family:var(--mono);font-size:9px;color:var(--t3);margin-bottom:6px;display:flex;justify-content:space-between}
+.inforow span{color:var(--t2)}
+.kbrow{font-family:var(--mono);font-size:10px;color:var(--t3);line-height:2}
+.kbrow em{color:var(--t2);font-style:normal}
+
+/* 하단 바 */
+#ftr{height:26px;background:var(--bg0);border-top:1px solid var(--bd);display:flex;align-items:center;padding:0 14px;gap:20px;flex-shrink:0}
+.fi{font-family:var(--mono);font-size:9px;color:var(--t3);letter-spacing:.07em}
+.fi span{color:var(--t2)}
+
+/* 토스트 */
+#toast{position:fixed;bottom:38px;left:50%;transform:translateX(-50%) translateY(14px);background:var(--bg3);border:1px solid var(--ac);border-radius:4px;padding:9px 18px;font-family:var(--mono);font-size:11px;color:var(--ac);opacity:0;pointer-events:none;transition:all .18s;z-index:9999;white-space:nowrap}
+#toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+#toast.wn{border-color:var(--wn);color:var(--wn)}
+#toast.er{border-color:var(--ac3);color:var(--ac3)}
+::-webkit-scrollbar{width:3px}
+::-webkit-scrollbar-thumb{background:var(--bhi)}
+</style>
 </head>
 <body>
 
-    <h1>🎬 Media Facade Pre-viz Auto-Mapper</h1>
-    <p style="color: #64748b; margin: 0;">실제 현장 촬영본(Mock-up) 퀄리티의 프로젝션 매핑 실시간 자동 합성 툴</p>
+<div id="hdr">
+  <div class="logo">SPATIAL<em>//</em>MAPPER</div>
+  <div class="badge">v1.1</div>
+  <div class="sp"></div>
+  <span class="dot" id="dBg"></span><span style="font-family:var(--mono);font-size:10px;color:var(--t3);margin-right:12px">BG</span>
+  <span class="dot" id="dVid"></span><span style="font-family:var(--mono);font-size:10px;color:var(--t3);margin-right:12px">VID</span>
+  <div id="hfps">-- FPS</div>
+</div>
 
-    <div class="container">
-        <div class="control-panel">
-            <div class="section-title" style="margin-top:0;">1. 에셋 로드 (현장 & 콘텐츠)</div>
-            <label>🖼️ 현장 배경 사진 (Wall/Space)</label>
-            <input type="file" id="bg-input" accept="image/*">
+<div id="main">
 
-            <label>🎞️ 상영할 미디어 아트 (Video)</label>
-            <input type="file" id="video-input" accept="video/*">
+  <!-- 왼쪽 패널 -->
+  <div id="lp">
 
-            <div class="section-title">2. 리얼리티 합성 보정 (Photorealism)</div>
-            
-            <label>✨ 빛 블렌딩 모드 (프로젝터 효과)</label>
-            <select id="blend-mode">
-                <option value="screen">Screen (스크린 - 실제 빔프로젝터 느낌)</option>
-                <option value="lighter">Lighter (라이터 - 강한 발광체/LED 느낌)</option>
-                <option value="source-over">Normal (노멀 - 단순 덮어쓰기)</option>
-            </select>
+    <div class="sec">
+      <div class="lbl">에셋 로드</div>
 
-            <label>🌟 주변부 환경광(Glow Spill): <span id="glow-val" class="value-disp">30</span>px</label>
-            <input type="range" id="glow-input" min="0" max="150" value="30">
+      <!-- SLOT A: label로 감싸서 클릭 보장 -->
+      <div class="slot-wrap">
+        <label class="slot" id="slotA" for="inBg"
+               ondragover="dragOver(event,'slotA')" ondragleave="dragLeave('slotA')" ondrop="dropBg(event)">
+          <div class="slot-letter">A</div>
+          <div class="slot-desc">배경 이미지 (공간 사진)</div>
+          <div class="slot-fn" id="fnBg">—</div>
+          <div class="slot-hint">클릭 또는 드래그 &amp; 드롭</div>
+          <div class="slot-hint">JPG · PNG · WEBP · GIF</div>
+        </label>
+        <input type="file" id="inBg" accept="image/*" onchange="onBgFile(this.files[0])">
+      </div>
 
-            <label>🌫️ 영상 투명도 (Opacity): <span id="opacity-val" class="value-disp">90</span>%</label>
-            <input type="range" id="opacity-input" min="10" max="100" value="90">
-
-            <label>✂️ 경계선 페더 (Edge Softness): <span id="feather-val" class="value-disp">10</span>px</label>
-            <input type="range" id="feather-input" min="0" max="100" value="10">
-        </div>
-
-        <div class="view-panel">
-            <div id="canvas-container">
-                <canvas id="main-canvas" width="960" height="540"></canvas>
-                <div class="control-point" id="cp0" style="left: 150px; top: 100px;"></div>
-                <div class="control-point" id="cp1" style="left: 810px; top: 100px;"></div>
-                <div class="control-point" id="cp2" style="left: 150px; top: 440px;"></div>
-                <div class="control-point" id="cp3" style="left: 810px; top: 440px;"></div>
-            </div>
-        </div>
+      <!-- SLOT B -->
+      <div class="slot-wrap">
+        <label class="slot" id="slotB" for="inVid"
+               ondragover="dragOver(event,'slotB')" ondragleave="dragLeave('slotB')" ondrop="dropVid(event)">
+          <div class="slot-letter">B</div>
+          <div class="slot-desc">콘텐츠 비디오 (상영 소스)</div>
+          <div class="slot-fn" id="fnVid">—</div>
+          <div class="slot-hint">클릭 또는 드래그 &amp; 드롭</div>
+          <div class="slot-hint">MP4 · WEBM · MOV · OGV</div>
+        </label>
+        <input type="file" id="inVid" accept="video/*" onchange="onVidFile(this.files[0])">
+      </div>
     </div>
 
-    <script>
-        const canvas = document.getElementById('main-canvas');
-        const ctx = canvas.getContext('2d');
-        
-        // UI 요소를 변수에 바인딩
-        const bgInput = document.getElementById('bg-input');
-        const videoInput = document.getElementById('video-input');
-        const blendModeSelect = document.getElementById('blend-mode');
-        const glowInput = document.getElementById('glow-input');
-        const glowVal = document.getElementById('glow-val');
-        const opacityInput = document.getElementById('opacity-input');
-        const opacityVal = document.getElementById('opacity-val');
-        const featherInput = document.getElementById('feather-input');
-        const featherVal = document.getElementById('feather-val');
-        
-        const cps = [document.getElementById('cp0'), document.getElementById('cp1'), document.getElementById('cp2'), document.getElementById('cp3')];
-        
-        let bgImage = null;
-        let videoElement = null;
-        let isVideoLoaded = false;
+    <!-- Corner Pin -->
+    <div class="sec">
+      <div class="lbl">Corner Pin</div>
+      <div class="pins">
+        <div class="pi" id="pi0" onclick="selPin(0)"><div class="pi-lbl">TL ◤</div><div class="pi-xy" id="pxy0">—</div></div>
+        <div class="pi" id="pi1" onclick="selPin(1)"><div class="pi-lbl">TR ◥</div><div class="pi-xy" id="pxy1">—</div></div>
+        <div class="pi" id="pi2" onclick="selPin(2)"><div class="pi-lbl">BL ◣</div><div class="pi-xy" id="pxy2">—</div></div>
+        <div class="pi" id="pi3" onclick="selPin(3)"><div class="pi-lbl">BR ◢</div><div class="pi-xy" id="pxy3">—</div></div>
+      </div>
+      <button class="btn" onclick="resetPins()">핀 초기화</button>
+    </div>
 
-        let corners = [{x: 150, y: 100}, {x: 810, y: 100}, {x: 150, y: 440}, {x: 810, y: 440}];
-        let activePoint = null;
+    <!-- Edge Blending -->
+    <div class="sec">
+      <div class="lbl">Edge Blending</div>
+      <div class="cr"><div class="ch"><span>Left</span><span class="cv" id="vL">0px</span></div><input type="range" class="r2" min="0" max="400" value="0" id="sL" oninput="setBlend('L',this.value)"></div>
+      <div class="cr"><div class="ch"><span>Right</span><span class="cv" id="vR">0px</span></div><input type="range" class="r2" min="0" max="400" value="0" id="sR" oninput="setBlend('R',this.value)"></div>
+      <div class="cr"><div class="ch"><span>Top</span><span class="cv" id="vT">0px</span></div><input type="range" class="r2" min="0" max="400" value="0" id="sT" oninput="setBlend('T',this.value)"></div>
+      <div class="cr"><div class="ch"><span>Bottom</span><span class="cv" id="vB">0px</span></div><input type="range" class="r2" min="0" max="400" value="0" id="sB" oninput="setBlend('B',this.value)"></div>
+    </div>
 
-        // 드래그 로직
-        cps.forEach((cp, index) => {
-            cp.addEventListener('mousedown', () => { activePoint = index; });
-        });
-        window.addEventListener('mouseup', () => { activePoint = null; });
-        window.addEventListener('mousemove', (e) => {
-            if (activePoint !== null) {
-                const rect = canvas.getBoundingClientRect();
-                let x = Math.max(0, Math.min(canvas.width, e.clientX - rect.left));
-                let y = Math.max(0, Math.min(canvas.height, e.clientY - rect.top));
-                
-                corners[activePoint] = {x, y};
-                cps[activePoint].style.left = x + 'px';
-                cps[activePoint].style.top = y + 'px';
-                if(!isVideoLoaded) renderLoop();
-            }
-        });
+    <!-- 비디오 -->
+    <div class="sec">
+      <div class="lbl">비디오 재생</div>
+      <div class="cr"><div class="ch"><span>불투명도</span><span class="cv" id="vOp">100%</span></div><input type="range" class="r3" min="0" max="100" value="100" id="sOp" oninput="setOp(this.value)"></div>
+      <button class="btn pri" id="btnPlay" onclick="togglePlay()" disabled>▶ 재생 / 일시정지</button>
+      <button class="btn" onclick="V.currentTime=0">처음으로</button>
+    </div>
 
-        // 배경 및 영상 로드
-        bgInput.addEventListener('change', (e) => {
-            const file = e.target.files[0];
-            if (!file) return;
-            bgImage = new Image();
-            bgImage.src = URL.createObjectURL(file);
-            bgImage.onload = () => { renderLoop(); };
-        });
+    <!-- 내보내기 -->
+    <div class="sec">
+      <div class="lbl">내보내기</div>
+      <select id="resSel" onchange="onResChange(this.value)">
+        <option value="5120x1080">5120 × 1080 (파사드 표준)</option>
+        <option value="3840x1080">3840 × 1080 (Ultrawide)</option>
+        <option value="1920x1080">1920 × 1080 (FHD)</option>
+        <option value="3840x2160">3840 × 2160 (4K)</option>
+        <option value="custom">커스텀...</option>
+      </select>
+      <div class="cres" id="cres">
+        <input type="number" id="cw" value="5120" min="320">
+        <span>×</span>
+        <input type="number" id="ch_" value="1080" min="180">
+      </div>
+      <button class="btn pri" id="btnSnap" onclick="doSnap()" disabled>⬇ 스냅샷 PNG 저장</button>
+      <button class="btn" id="btnRec" onclick="toggleRec()" disabled>● 영상 녹화</button>
+    </div>
+  </div>
 
-        videoInput.addEventListener('change', (e) => {
-            const file = e.target.files[0];
-            if (!file) return;
-            if(videoElement) { videoElement.pause(); videoElement.remove(); }
-            
-            videoElement = document.createElement('video');
-            videoElement.src = URL.createObjectURL(file);
-            videoElement.loop = true; videoElement.muted = true;
-            videoElement.play();
-            
-            videoElement.addEventListener('play', () => {
-                isVideoLoaded = true;
-                function playStep() { if (isVideoLoaded) { renderLoop(); requestAnimationFrame(playStep); } }
-                requestAnimationFrame(playStep);
-            });
-        });
+  <!-- 뷰어 -->
+  <div id="viewer">
+    <div id="empty">
+      <div class="ecross"></div>
+      <div class="etxt">Slot A — 배경 이미지를 로드하세요</div>
+    </div>
+    <canvas id="cbg"></canvas>
+    <canvas id="cmain"></canvas>
+  </div>
 
-        // 슬라이더 UI 업데이트
-        [glowInput, opacityInput, featherInput, blendModeSelect].forEach(el => {
-            el.addEventListener('input', () => {
-                glowVal.innerText = glowInput.value;
-                opacityVal.innerText = opacityInput.value;
-                featherVal.innerText = featherInput.value;
-                if(!isVideoLoaded) renderLoop();
-            });
-        });
+  <!-- 오른쪽 패널 -->
+  <div id="rp">
+    <div class="sec"><div class="lbl">출력 미리보기</div></div>
+    <canvas id="pvcvs"></canvas>
+    <div class="sec" style="margin-top:4px">
+      <div class="lbl">정보</div>
+      <div class="inforow">배경 <span id="iBg">—</span></div>
+      <div class="inforow">비디오 <span id="iVid">—</span></div>
+      <div class="inforow">출력 <span id="iOut">—</span></div>
+      <div class="inforow">길이 <span id="iDur">—</span></div>
+    </div>
+    <div class="sec">
+      <div class="lbl">단축키</div>
+      <div class="kbrow"><em>Space</em> — 재생/정지</div>
+      <div class="kbrow"><em>R</em> — 핀 리셋</div>
+      <div class="kbrow"><em>S</em> — 스냅샷</div>
+      <div class="kbrow"><em>1–4</em> — 핀 선택</div>
+      <div class="kbrow"><em>↑↓←→</em> — 핀 이동</div>
+      <div class="kbrow"><em>Shift+화살표</em> — 10px</div>
+    </div>
+    <div class="sec">
+      <div class="lbl">녹화</div>
+      <div class="inforow"><span class="dot" id="recDot"></span> <span id="recSt">대기 중</span></div>
+      <div class="inforow">크기 <span id="recSz">—</span></div>
+    </div>
+  </div>
+</div>
 
-        // ✨ 메인 렌더링 루프 (리얼리티 합성 알고리즘)
-        function renderLoop() {
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-            
-            // 1. 베이스 레이어: 현장 배경 사진 렌더링 (Normal 모드)
-            ctx.globalCompositeOperation = 'source-over';
-            ctx.globalAlpha = 1.0;
-            ctx.filter = 'none';
-            if (bgImage) {
-                ctx.drawImage(bgImage, 0, 0, canvas.width, canvas.height);
-            } else {
-                ctx.fillStyle = '#1e293b'; ctx.fillRect(0, 0, canvas.width, canvas.height);
-            }
+<div id="ftr">
+  <div class="fi">MODE <span id="fMode">IDLE</span></div>
+  <div class="fi">PIN <span id="fPin">NONE</span></div>
+  <div class="fi">XY <span id="fXY">—</span></div>
+  <div class="fi">TIME <span id="fTime">—</span></div>
+  <div class="sp"></div>
+  <div class="fi" style="color:var(--t3)">SPATIAL MAPPER · GitHub Pages</div>
+</div>
 
-            if (videoElement && isVideoLoaded) {
-                // 바운딩 박스 계산
-                let minX = Math.min(corners[0].x, corners[2].x);
-                let minY = Math.min(corners[0].y, corners[1].y);
-                let w = Math.max(corners[1].x, corners[3].x) - minX;
-                let h = Math.max(corners[2].y, corners[3].y) - minY;
+<video id="vid" style="display:none" loop playsinline crossorigin="anonymous"></video>
+<div id="toast"></div>
 
-                // 2. 환경광 레이어: 주변 바닥/천장에 빛 번짐(Glow Spill) 생성
-                let glow = parseInt(glowInput.value);
-                if (glow > 0) {
-                    ctx.save();
-                    ctx.globalCompositeOperation = blendModeSelect.value; // 주변에도 빛처럼 합성
-                    ctx.globalAlpha = (parseInt(opacityInput.value) / 100) * 0.5; // 원래 투명도의 절반
-                    ctx.filter = `blur(${glow}px)`; // 강한 블러로 환경광 효과
-                    
-                    ctx.beginPath();
-                    ctx.moveTo(corners[0].x, corners[0].y); ctx.lineTo(corners[1].x, corners[1].y);
-                    ctx.lineTo(corners[3].x, corners[3].y); ctx.lineTo(corners[2].x, corners[2].y);
-                    ctx.closePath();
-                    ctx.clip();
-                    
-                    ctx.drawImage(videoElement, minX - glow, minY - glow, w + glow*2, h + glow*2);
-                    ctx.restore();
-                }
+<script>
+// ═══════════════════════════════════════════════
+// SPATIAL MEDIA AUTO-MAPPER  —  core engine
+// ═══════════════════════════════════════════════
 
-                // 3. 메인 콘텐츠 레이어: 실제 영상 매핑 및 렌더링
-                ctx.save();
-                ctx.globalCompositeOperation = blendModeSelect.value; // Screen 등 빛 합성 모드 적용
-                ctx.globalAlpha = parseInt(opacityInput.value) / 100;
-                ctx.filter = 'none';
+const V   = document.getElementById('vid');
+const CBG = document.getElementById('cbg');
+const CM  = document.getElementById('cmain');
+const PV  = document.getElementById('pvcvs');
+const XBG = CBG.getContext('2d');
+const XM  = CM.getContext('2d');
+const XP  = PV.getContext('2d');
 
-                ctx.beginPath();
-                ctx.moveTo(corners[0].x, corners[0].y); ctx.lineTo(corners[1].x, corners[1].y);
-                ctx.lineTo(corners[3].x, corners[3].y); ctx.lineTo(corners[2].x, corners[2].y);
-                ctx.closePath();
-                ctx.clip(); // 매핑 영역 마스크
+const S = {
+  bgImg:null, bgW:0, bgH:0,
+  vidW:0, vidH:0,
+  vW:0, vH:0,          // 뷰어 캔버스 크기
+  pins:[],
+  selPin:-1,
+  drag:false, dragI:-1,
+  blend:{L:0,R:0,T:0,B:0},
+  opacity:1,
+  animId:null,
+  rec:null, recChunks:[], isRec:false, recT:0,
+  fps:0, fCnt:0, fLast:0,
+};
 
-                ctx.drawImage(videoElement, minX, minY, w, h);
-                ctx.restore();
+// ─── 유틸 ────────────────────────────────────
+function toast(msg,type='',ms=2200){
+  const el=document.getElementById('toast');
+  el.textContent=msg; el.className='show'+(type?' '+type:'');
+  clearTimeout(toast._t); toast._t=setTimeout(()=>el.className='',ms);
+}
+function setDot(id,on){
+  const d=document.getElementById(id);
+  d.className='dot'+(on?' on':'');
+}
+function fmt(s){
+  return Math.floor(s/60).toString().padStart(2,'0')+':'+Math.floor(s%60).toString().padStart(2,'0');
+}
+// h.264 짝수 보정
+function safeWH(w,h){return{w:Math.round(w/2)*2,h:Math.round(h/2)*2};}
 
-                // 4. 마스크 후보정: 외곽선 페더링 깎아내기 (자연스러운 경계선)
-                let feather = parseInt(featherInput.value);
-                if (feather > 0) {
-                    ctx.save();
-                    ctx.globalCompositeOperation = 'destination-out'; // 지우개 모드
-                    
-                    let gradLeft = ctx.createLinearGradient(minX, 0, minX + feather, 0);
-                    gradLeft.addColorStop(0, 'rgba(0,0,0,1)'); gradLeft.addColorStop(1, 'rgba(0,0,0,0)');
-                    ctx.fillStyle = gradLeft; ctx.fillRect(minX, minY, feather, h);
+// ─── 파일 로드 ─────────────────────────────────
+// 배경 이미지
+function onBgFile(file){
+  if(!file)return;
+  if(!file.type.startsWith('image/')){toast('이미지 파일을 선택하세요','wn');return;}
+  const url=URL.createObjectURL(file);
+  const img=new Image();
+  img.onload=()=>{
+    S.bgImg=img; S.bgW=img.naturalWidth; S.bgH=img.naturalHeight;
+    document.getElementById('fnBg').textContent=file.name;
+    document.getElementById('slotA').classList.add('loaded');
+    setDot('dBg',true);
+    document.getElementById('iBg').textContent=S.bgW+'×'+S.bgH;
+    document.getElementById('empty').style.display='none';
+    resizeCvs(); initPins(); startLoop();
+    toast('배경 이미지 로드 완료 ✓');
+    refreshExport();
+  };
+  img.onerror=()=>toast('이미지 로드 실패','er');
+  img.src=url;
+}
 
-                    let gradRight = ctx.createLinearGradient(minX + w - feather, 0, minX + w, 0);
-                    gradRight.addColorStop(0, 'rgba(0,0,0,0)'); gradRight.addColorStop(1, 'rgba(0,0,0,1)');
-                    ctx.fillStyle = gradRight; ctx.fillRect(minX + w - feather, minY, feather, h);
-                    ctx.restore();
-                }
-            }
-        }
-        renderLoop();
-    </script>
+// 비디오
+function onVidFile(file){
+  if(!file)return;
+  if(!file.type.startsWith('video/')){toast('비디오 파일을 선택하세요','wn');return;}
+  const url=URL.createObjectURL(file);
+  V.src=url;
+  V.load();
+  V.onloadedmetadata=()=>{
+    S.vidW=V.videoWidth; S.vidH=V.videoHeight;
+    document.getElementById('fnVid').textContent=file.name;
+    document.getElementById('slotB').classList.add('loaded');
+    setDot('dVid',true);
+    document.getElementById('iVid').textContent=S.vidW+'×'+S.vidH;
+    document.getElementById('iDur').textContent=fmt(V.duration);
+    document.getElementById('btnPlay').disabled=false;
+    V.play().catch(()=>{});
+    toast('비디오 로드 완료 ✓');
+    refreshExport();
+  };
+  V.onerror=()=>toast('비디오 로드 실패','er');
+}
+
+// ─── 드래그 & 드롭 ────────────────────────────
+function dragOver(e,id){e.preventDefault();document.getElementById(id).classList.add('dragover');}
+function dragLeave(id){document.getElementById(id).classList.remove('dragover');}
+function dropBg(e){
+  e.preventDefault(); dragLeave('slotA');
+  const f=e.dataTransfer.files[0]; if(f)onBgFile(f);
+}
+function dropVid(e){
+  e.preventDefault(); dragLeave('slotB');
+  const f=e.dataTransfer.files[0]; if(f)onVidFile(f);
+}
+
+// ─── 캔버스 크기 ──────────────────────────────
+function resizeCvs(){
+  const vw=document.getElementById('viewer').clientWidth;
+  const vh=document.getElementById('viewer').clientHeight;
+  let w,h;
+  if(S.bgImg){
+    const sc=Math.min(vw/S.bgW, vh/S.bgH)*0.96;
+    w=Math.round(S.bgW*sc); h=Math.round(S.bgH*sc);
+  } else {w=Math.min(vw,1200);h=Math.round(w*0.422);}
+  S.vW=w; S.vH=h;
+  [CBG,CM].forEach(c=>{c.width=w;c.height=h;c.style.width=w+'px';c.style.height=h+'px';});
+  const pw=PV.parentElement.clientWidth||200;
+  PV.width=pw; PV.height=Math.round(pw*9/16);
+}
+
+// ─── PIN 초기화 ───────────────────────────────
+function initPins(){
+  const W=S.vW,H=S.vH,m=0.2;
+  S.pins=[
+    {x:W*m,     y:H*m},
+    {x:W*(1-m), y:H*m},
+    {x:W*m,     y:H*(1-m)},
+    {x:W*(1-m), y:H*(1-m)},
+  ];
+  refreshPinUI();
+}
+function resetPins(){initPins();toast('핀 초기화');}
+
+function refreshPinUI(){
+  S.pins.forEach((p,i)=>{
+    document.getElementById('pxy'+i).textContent=Math.round(p.x)+', '+Math.round(p.y);
+  });
+  document.getElementById('fPin').textContent=
+    S.selPin>=0?['TL','TR','BL','BR'][S.selPin]:'NONE';
+}
+
+function selPin(i){
+  S.selPin=(S.selPin===i)?-1:i;
+  for(let k=0;k<4;k++){
+    document.getElementById('pi'+k).className='pi'+(S.selPin===k?' sel':'');
+  }
+  refreshPinUI();
+}
+
+// ─── 호모그래피 계산 (가우스 소거법) ──────────────
+function gaussElim(A,b){
+  const n=b.length;
+  for(let i=0;i<n;i++){
+    let mx=i;
+    for(let j=i+1;j<n;j++) if(Math.abs(A[j][i])>Math.abs(A[mx][i]))mx=j;
+    [A[i],A[mx]]=[A[mx],A[i]];[b[i],b[mx]]=[b[mx],b[i]];
+    for(let j=i+1;j<n;j++){
+      const f=A[j][i]/A[i][i];
+      for(let k=i;k<n;k++)A[j][k]-=f*A[i][k];
+      b[j]-=f*b[i];
+    }
+  }
+  const x=new Array(n).fill(0);
+  for(let i=n-1;i>=0;i--){
+    x[i]=b[i]/A[i][i];
+    for(let j=0;j<i;j++)b[j]-=A[j][i]*x[i];
+  }
+  return x;
+}
+
+function calcH(src,dst){
+  const A=[],b=[];
+  for(let i=0;i<4;i++){
+    const sx=src[i].x,sy=src[i].y,dx=dst[i].x,dy=dst[i].y;
+    A.push([sx,sy,1,0,0,0,-dx*sx,-dx*sy]);
+    A.push([0,0,0,sx,sy,1,-dy*sx,-dy*sy]);
+    b.push(dx);b.push(dy);
+  }
+  const h=gaussElim(A,b);
+  return[[h[0],h[1],h[2]],[h[3],h[4],h[5]],[h[6],h[7],1]];
+}
+
+function warpPt(H,x,y){
+  const w=H[2][0]*x+H[2][1]*y+H[2][2];
+  return{x:(H[0][0]*x+H[0][1]*y+H[0][2])/w,
+         y:(H[1][0]*x+H[1][1]*y+H[1][2])/w};
+}
+
+// ─── 삼각 메시 투시 렌더링 ────────────────────────
+const COLS=28,ROWS=16;
+
+function drawWarp(ctx,vid,pins,opacity){
+  if(!vid||vid.readyState<2)return;
+  ctx.save();
+  ctx.globalAlpha=opacity;
+  const vw=vid.videoWidth||1,vh=vid.videoHeight||1;
+  const src=[{x:0,y:0},{x:vw,y:0},{x:0,y:vh},{x:vw,y:vh}];
+  const H=calcH(src,pins);
+  for(let r=0;r<ROWS;r++){
+    for(let c=0;c<COLS;c++){
+      const u0=c/COLS*vw,v0=r/ROWS*vh;
+      const u1=(c+1)/COLS*vw,v1=(r+1)/ROWS*vh;
+      const tl=warpPt(H,u0,v0),tr=warpPt(H,u1,v0);
+      const bl=warpPt(H,u0,v1),br=warpPt(H,u1,v1);
+      drawTri(ctx,vid,tl,tr,bl,{x:u0,y:v0},{x:u1,y:v0},{x:u0,y:v1},vw,vh);
+      drawTri(ctx,vid,tr,br,bl,{x:u1,y:v0},{x:u1,y:v1},{x:u0,y:v1},vw,vh);
+    }
+  }
+  ctx.restore();
+}
+
+function drawTri(ctx,vid,d0,d1,d2,s0,s1,s2,vw,vh){
+  ctx.save();
+  ctx.beginPath();
+  ctx.moveTo(d0.x,d0.y);ctx.lineTo(d1.x,d1.y);ctx.lineTo(d2.x,d2.y);
+  ctx.closePath();ctx.clip();
+  const dn=(d1.x-d0.x)*(d2.y-d0.y)-(d2.x-d0.x)*(d1.y-d0.y);
+  if(Math.abs(dn)<0.001){ctx.restore();return;}
+  const a=((s1.x-s0.x)*(d2.y-d0.y)-(s2.x-s0.x)*(d1.y-d0.y))/dn;
+  const b=((s2.x-s0.x)*(d1.x-d0.x)-(s1.x-s0.x)*(d2.x-d0.x))/dn;
+  const cc=s0.x-a*d0.x-b*d0.y;
+  const d=((s1.y-s0.y)*(d2.y-d0.y)-(s2.y-s0.y)*(d1.y-d0.y))/dn;
+  const e=((s2.y-s0.y)*(d1.x-d0.x)-(s1.y-s0.y)*(d2.x-d0.x))/dn;
+  const f=s0.y-d*d0.x-e*d0.y;
+  ctx.transform(a,d,b,e,cc,f);
+  ctx.drawImage(vid,0,0,vw,vh);
+  ctx.restore();
+}
+
+// ─── Edge Blending ────────────────────────────
+function applyBlend(ctx,pins,blend){
+  const {L,R,T,B}=blend;
+  if(!L&&!R&&!T&&!B)return;
+  const xs=pins.map(p=>p.x),ys=pins.map(p=>p.y);
+  const x0=Math.min(...xs),x1=Math.max(...xs);
+  const y0=Math.min(...ys),y1=Math.max(...ys);
+  const bw=x1-x0,bh=y1-y0;
+  ctx.save();
+  ctx.globalCompositeOperation='destination-out';
+  if(L>0){const g=ctx.createLinearGradient(x0,0,x0+L,0);g.addColorStop(0,'rgba(0,0,0,1)');g.addColorStop(1,'rgba(0,0,0,0)');ctx.fillStyle=g;ctx.fillRect(x0,y0,Math.min(L,bw),bh);}
+  if(R>0){const g=ctx.createLinearGradient(x1,0,x1-R,0);g.addColorStop(0,'rgba(0,0,0,1)');g.addColorStop(1,'rgba(0,0,0,0)');ctx.fillStyle=g;ctx.fillRect(Math.max(x1-R,x0),y0,Math.min(R,bw),bh);}
+  if(T>0){const g=ctx.createLinearGradient(0,y0,0,y0+T);g.addColorStop(0,'rgba(0,0,0,1)');g.addColorStop(1,'rgba(0,0,0,0)');ctx.fillStyle=g;ctx.fillRect(x0,y0,bw,Math.min(T,bh));}
+  if(B>0){const g=ctx.createLinearGradient(0,y1,0,y1-B);g.addColorStop(0,'rgba(0,0,0,1)');g.addColorStop(1,'rgba(0,0,0,0)');ctx.fillStyle=g;ctx.fillRect(x0,Math.max(y1-B,y0),bw,Math.min(B,bh));}
+  ctx.restore();
+}
+
+// ─── PIN 그리기 ───────────────────────────────
+const PR=9,PH=18;
+function drawPins(ctx,pins,sel){
+  const lb=['TL','TR','BL','BR'];
+  pins.forEach((p,i)=>{
+    const col=i===sel?'#FF4D8F':'#00C8FF';
+    ctx.beginPath();ctx.arc(p.x,p.y,PR+3,0,Math.PI*2);
+    ctx.strokeStyle=col+'30';ctx.lineWidth=1;ctx.stroke();
+    ctx.beginPath();ctx.arc(p.x,p.y,PR,0,Math.PI*2);
+    ctx.fillStyle=col+'99';ctx.fill();
+    ctx.strokeStyle=col;ctx.lineWidth=1.5;ctx.stroke();
+    ctx.strokeStyle='#fff';ctx.lineWidth=1;
+    ctx.beginPath();ctx.moveTo(p.x-PR,p.y);ctx.lineTo(p.x+PR,p.y);
+    ctx.moveTo(p.x,p.y-PR);ctx.lineTo(p.x,p.y+PR);ctx.stroke();
+    ctx.fillStyle=col;ctx.font='bold 9px Courier New,monospace';
+    ctx.textAlign='center';ctx.fillText(lb[i],p.x,p.y-PR-5);
+  });
+  if(pins.length===4){
+    ctx.setLineDash([4,4]);ctx.strokeStyle='#00C8FF35';ctx.lineWidth=1;
+    ctx.beginPath();
+    ctx.moveTo(pins[0].x,pins[0].y);ctx.lineTo(pins[1].x,pins[1].y);
+    ctx.lineTo(pins[3].x,pins[3].y);ctx.lineTo(pins[2].x,pins[2].y);
+    ctx.closePath();ctx.stroke();ctx.setLineDash([]);
+  }
+}
+
+// ─── 렌더 루프 ───────────────────────────────
+function frame(){
+  const W=S.vW,H=S.vH;
+  XBG.clearRect(0,0,W,H);
+  if(S.bgImg)XBG.drawImage(S.bgImg,0,0,W,H);
+  XM.clearRect(0,0,W,H);
+  if(V.readyState>=2&&S.pins.length===4){
+    drawWarp(XM,V,S.pins,S.opacity);
+    applyBlend(XM,S.pins,S.blend);
+  }
+  if(S.pins.length===4)drawPins(XM,S.pins,S.selPin);
+  // 미리보기
+  const pw=PV.width,ph=PV.height;
+  XP.clearRect(0,0,pw,ph);
+  XP.drawImage(CBG,0,0,pw,ph);
+  XP.drawImage(CM,0,0,pw,ph);
+  // FPS
+  const now=performance.now();
+  S.fCnt++;
+  if(now-S.fLast>=600){
+    S.fps=Math.round(S.fCnt*1000/(now-S.fLast));
+    document.getElementById('hfps').textContent=S.fps+' FPS';
+    S.fCnt=0;S.fLast=now;
+  }
+  if(V.readyState>=2)
+    document.getElementById('fTime').textContent=fmt(V.currentTime)+'/'+fmt(V.duration);
+  S.animId=requestAnimationFrame(frame);
+}
+
+function startLoop(){
+  if(S.animId)return;
+  S.fLast=performance.now();
+  S.animId=requestAnimationFrame(frame);
+  document.getElementById('fMode').textContent='LIVE';
+}
+
+// ─── 마우스 / 터치 ────────────────────────────
+function cvPos(e){
+  const r=CM.getBoundingClientRect();
+  const cx=e.touches?e.touches[0].clientX:e.clientX;
+  const cy=e.touches?e.touches[0].clientY:e.clientY;
+  return{x:(cx-r.left)*(CM.width/r.width),y:(cy-r.top)*(CM.height/r.height)};
+}
+function hitPin(pos){
+  for(let i=0;i<S.pins.length;i++){
+    const p=S.pins[i],dx=pos.x-p.x,dy=pos.y-p.y;
+    if(Math.sqrt(dx*dx+dy*dy)<=PH)return i;
+  }
+  return -1;
+}
+function clampPin(p){
+  p.x=Math.max(0,Math.min(S.vW,p.x));
+  p.y=Math.max(0,Math.min(S.vH,p.y));
+}
+
+CM.addEventListener('mousedown',e=>{
+  if(!S.pins.length)return;
+  const pos=cvPos(e),i=hitPin(pos);
+  if(i>=0){S.drag=true;S.dragI=i;selPin(i);CM.style.cursor='grabbing';}
+});
+CM.addEventListener('mousemove',e=>{
+  const pos=cvPos(e);
+  document.getElementById('fXY').textContent=Math.round(pos.x)+','+Math.round(pos.y);
+  if(S.drag&&S.dragI>=0){
+    S.pins[S.dragI].x=pos.x;S.pins[S.dragI].y=pos.y;
+    clampPin(S.pins[S.dragI]);refreshPinUI();
+  } else {
+    CM.style.cursor=hitPin(pos)>=0?'grab':'crosshair';
+  }
+});
+CM.addEventListener('mouseup',()=>{S.drag=false;S.dragI=-1;CM.style.cursor='crosshair';});
+CM.addEventListener('mouseleave',()=>{S.drag=false;S.dragI=-1;});
+
+CM.addEventListener('touchstart',e=>{
+  e.preventDefault();
+  const pos=cvPos(e),i=hitPin(pos);
+  if(i>=0){S.drag=true;S.dragI=i;selPin(i);}
+},{passive:false});
+CM.addEventListener('touchmove',e=>{
+  e.preventDefault();
+  if(S.drag&&S.dragI>=0){
+    const pos=cvPos(e);
+    S.pins[S.dragI].x=pos.x;S.pins[S.dragI].y=pos.y;
+    clampPin(S.pins[S.dragI]);refreshPinUI();
+  }
+},{passive:false});
+CM.addEventListener('touchend',()=>{S.drag=false;S.dragI=-1;});
+
+// ─── 키보드 ───────────────────────────────────
+document.addEventListener('keydown',e=>{
+  if(['INPUT','SELECT','TEXTAREA'].includes(document.activeElement.tagName))return;
+  switch(e.key){
+    case 'r':case 'R':resetPins();break;
+    case ' ':e.preventDefault();togglePlay();break;
+    case 's':case 'S':doSnap();break;
+    case '1':selPin(0);break;case '2':selPin(1);break;
+    case '3':selPin(2);break;case '4':selPin(3);break;
+    case 'ArrowLeft':case 'ArrowRight':case 'ArrowUp':case 'ArrowDown':
+      if(S.selPin>=0){
+        e.preventDefault();
+        const st=e.shiftKey?10:1,p=S.pins[S.selPin];
+        if(e.key==='ArrowLeft')p.x-=st;if(e.key==='ArrowRight')p.x+=st;
+        if(e.key==='ArrowUp')p.y-=st;if(e.key==='ArrowDown')p.y+=st;
+        clampPin(p);refreshPinUI();
+      }
+      break;
+  }
+});
+
+// ─── 컨트롤 ───────────────────────────────────
+function setBlend(k,v){S.blend[k]=parseInt(v);document.getElementById('v'+k).textContent=v+'px';}
+function setOp(v){S.opacity=v/100;document.getElementById('vOp').textContent=v+'%';}
+function togglePlay(){
+  if(!V.src)return;
+  if(V.paused){V.play();document.getElementById('btnPlay').textContent='⏸ 재생 / 일시정지';}
+  else{V.pause();document.getElementById('btnPlay').textContent='▶ 재생 / 일시정지';}
+}
+function onResChange(v){
+  document.getElementById('cres').className='cres'+(v==='custom'?' show':'');
+  if(v!=='custom'){const[w,h]=v.split('x');document.getElementById('cw').value=w;document.getElementById('ch_').value=h;}
+  document.getElementById('iOut').textContent=getExRes().w+'×'+getExRes().h;
+}
+function getExRes(){
+  const v=document.getElementById('resSel').value;
+  let w,h;
+  if(v==='custom'){w=parseInt(document.getElementById('cw').value)||5120;h=parseInt(document.getElementById('ch_').value)||1080;}
+  else{[w,h]=v.split('x').map(Number);}
+  return safeWH(w,h);
+}
+function refreshExport(){
+  const ok=!!(S.bgImg&&V.src);
+  document.getElementById('btnSnap').disabled=!ok;
+  document.getElementById('btnRec').disabled=!ok;
+  document.getElementById('iOut').textContent=getExRes().w+'×'+getExRes().h;
+}
+
+// ─── 스냅샷 저장 ──────────────────────────────
+function doSnap(){
+  if(!S.bgImg){toast('배경 이미지를 먼저 로드하세요','wn');return;}
+  const{w,h}=getExRes();
+  const fc=document.createElement('canvas');fc.width=w;fc.height=h;
+  const fx=fc.getContext('2d');
+  const sx=w/S.vW,sy=h/S.vH;
+  const sp=S.pins.map(p=>({x:p.x*sx,y:p.y*sy}));
+  const bl={L:S.blend.L*sx,R:S.blend.R*sx,T:S.blend.T*sy,B:S.blend.B*sy};
+  // 오프스크린 비디오 레이어
+  const vc=document.createElement('canvas');vc.width=w;vc.height=h;
+  const vx=vc.getContext('2d');
+  if(S.bgImg)fx.drawImage(S.bgImg,0,0,w,h);
+  if(V.readyState>=2){drawWarp(vx,V,sp,S.opacity);applyBlend(vx,sp,bl);}
+  fx.drawImage(vc,0,0);
+  fc.toBlob(blob=>{
+    const a=document.createElement('a');
+    a.href=URL.createObjectURL(blob);
+    a.download='spatial_'+w+'x'+h+'_'+Date.now()+'.png';
+    a.click();
+    toast('스냅샷 저장 완료 ('+w+'×'+h+')');
+  },'image/png');
+}
+
+// ─── 비디오 녹화 (MediaRecorder) ──────────────
+function toggleRec(){S.isRec?stopRec():startRec();}
+function startRec(){
+  if(!S.bgImg||!V.src){toast('에셋을 먼저 로드하세요','wn');return;}
+  const{w,h}=getExRes();
+  const rc=document.createElement('canvas');rc.width=w;rc.height=h;
+  const rx=rc.getContext('2d');
+  const sx=w/S.vW,sy=h/S.vH;
+  const mt=['video/webm;codecs=vp9','video/webm;codecs=vp8','video/webm'].find(m=>{
+    try{return MediaRecorder.isTypeSupported(m);}catch(e){return false;}
+  })||'video/webm';
+  const stream=rc.captureStream(30);
+  S.rec=new MediaRecorder(stream,{mimeType:mt,videoBitsPerSecond:8000000});
+  S.recChunks=[];
+  S.rec.ondataavailable=e=>{if(e.data.size>0)S.recChunks.push(e.data);};
+  S.rec.onstop=()=>saveRec(w,h);
+  S.rec.start(100);
+  S.isRec=true;S.recT=Date.now();
+  V.currentTime=0;V.play();
+  // 녹화 렌더 루프
+  (function rframe(){
+    if(!S.isRec)return;
+    rx.clearRect(0,0,w,h);
+    if(S.bgImg)rx.drawImage(S.bgImg,0,0,w,h);
+    if(V.readyState>=2){
+      const sp=S.pins.map(p=>({x:p.x*sx,y:p.y*sy}));
+      const bl={L:S.blend.L*sx,R:S.blend.R*sx,T:S.blend.T*sy,B:S.blend.B*sy};
+      const vc=document.createElement('canvas');vc.width=w;vc.height=h;
+      const vx=vc.getContext('2d');
+      drawWarp(vx,V,sp,S.opacity);applyBlend(vx,sp,bl);
+      rx.drawImage(vc,0,0);
+    }
+    requestAnimationFrame(rframe);
+  })();
+  document.getElementById('btnRec').textContent='■ 녹화 중지';
+  document.getElementById('btnRec').classList.add('red');
+  document.getElementById('recDot').classList.add('on');
+  document.getElementById('recDot').style.background='#FF4D8F';
+  document.getElementById('recSt').textContent='녹화 중...';
+  toast('녹화 시작 — 다시 클릭하면 저장','',3000);
+}
+function stopRec(){
+  S.isRec=false;
+  if(S.rec&&S.rec.state!=='inactive')S.rec.stop();
+  document.getElementById('btnRec').textContent='● 영상 녹화';
+  document.getElementById('btnRec').classList.remove('red');
+  document.getElementById('recDot').classList.remove('on');
+  document.getElementById('recDot').style.background='';
+  document.getElementById('recSt').textContent='처리 중...';
+}
+function saveRec(w,h){
+  const blob=new Blob(S.recChunks,{type:'video/webm'});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  a.download='spatial_'+w+'x'+h+'_'+Date.now()+'.webm';
+  a.click();
+  document.getElementById('recSt').textContent='저장 완료';
+  document.getElementById('recSz').textContent=(blob.size/1024/1024).toFixed(1)+' MB';
+  toast('영상 저장 완료');
+}
+
+// ─── 창 리사이즈 ──────────────────────────────
+window.addEventListener('resize',()=>{
+  if(!S.bgImg)return;
+  const ox=S.vW,oy=S.vH;
+  resizeCvs();
+  const sx=S.vW/ox,sy=S.vH/oy;
+  S.pins=S.pins.map(p=>({x:p.x*sx,y:p.y*sy}));
+  refreshPinUI();
+});
+
+// ─── 초기화 ───────────────────────────────────
+(function(){
+  resizeCvs();
+  document.getElementById('iOut').textContent=getExRes().w+'×'+getExRes().h;
+})();
+</script>
 </body>
 </html>
