@@ -3,55 +3,82 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Spatial Scanner MVP</title>
+  <title>Spatial Facade Mapper MVP</title>
   <link rel="stylesheet" href="./style.css" />
 </head>
 <body>
   <main class="app">
     <header class="topbar">
       <div>
-        <h1>Spatial Scanner MVP</h1>
-        <p>이미지를 업로드하면 벽면/건물 후보가 될 수 있는 공간 라인을 스캔합니다.</p>
+        <h1>Spatial Facade Mapper</h1>
+        <p>배경 공간을 불러오고, 파사드 콘텐츠를 선택한 뒤 네 꼭짓점으로 즉시 왜곡 매핑합니다.</p>
       </div>
     </header>
 
+    <section id="dropZone" class="drop-zone">
+      <strong>이미지/영상 파일 또는 폴더를 여기로 드래그</strong>
+      <span>배경 이미지, 파사드 이미지/영상 파일을 한 번에 넣을 수 있습니다.</span>
+      <div class="file-actions">
+        <label>
+          파일 선택
+          <input id="fileInput" type="file" multiple accept="image/*,video/*" />
+        </label>
+        <label>
+          폴더 선택
+          <input id="folderInput" type="file" webkitdirectory directory multiple />
+        </label>
+      </div>
+    </section>
+
     <section class="controls">
-      <label class="file-button">
-        배경 이미지 업로드
-        <input id="imageInput" type="file" accept="image/*" />
+      <label>
+        배경 이미지
+        <select id="bgSelect"></select>
       </label>
 
-      <button id="scanButton" disabled>공간 스캔</button>
-      <button id="clearButton" disabled>결과 지우기</button>
+      <label>
+        파사드 콘텐츠
+        <select id="contentSelect"></select>
+      </label>
+
+      <button id="resetQuadButton" disabled>공간 핸들 초기화</button>
+      <button id="fitButton" disabled>중앙 영역에 맞추기</button>
     </section>
 
     <section class="workspace">
-      <div class="canvas-wrap">
-        <canvas id="canvas"></canvas>
+      <div id="stage" class="stage">
+        <img id="backgroundImage" alt="" />
+        <div id="mappedLayer" class="mapped-layer">
+          <img id="mappedImage" alt="" />
+          <video id="mappedVideo" muted loop playsinline controls></video>
+        </div>
+
+        <button class="handle" id="h0" aria-label="top left"></button>
+        <button class="handle" id="h1" aria-label="top right"></button>
+        <button class="handle" id="h2" aria-label="bottom right"></button>
+        <button class="handle" id="h3" aria-label="bottom left"></button>
       </div>
 
       <aside class="panel">
-        <h2>스캔 정보</h2>
+        <h2>파일 목록</h2>
+        <div id="fileList" class="file-list"></div>
+
+        <h2>매핑 상태</h2>
         <div class="stat">
-          <span>이미지</span>
-          <strong id="imageInfo">없음</strong>
+          <span>배경</span>
+          <strong id="bgInfo">없음</strong>
         </div>
         <div class="stat">
-          <span>검출 라인</span>
-          <strong id="lineCount">0</strong>
+          <span>콘텐츠</span>
+          <strong id="contentInfo">없음</strong>
         </div>
         <div class="stat">
-          <span>수평 후보</span>
-          <strong id="horizontalCount">0</strong>
-        </div>
-        <div class="stat">
-          <span>수직 후보</span>
-          <strong id="verticalCount">0</strong>
+          <span>모드</span>
+          <strong id="modeInfo">대기</strong>
         </div>
 
         <p class="note">
-          이 단계는 AI가 아니라 브라우저 기반 엣지/라인 검출 테스트입니다.
-          벽면, 창문, 건물 외곽처럼 강한 직선 구조가 있는 이미지에서 잘 보입니다.
+          현재 버전은 브라우저 미리보기용입니다. MP4 렌더/export는 다음 단계에서 붙입니다.
         </p>
       </aside>
     </section>
