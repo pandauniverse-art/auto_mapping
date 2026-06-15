@@ -48,9 +48,15 @@ p {
   background: #10242d;
 }
 
-.drop b {
+.drop strong {
   display: block;
-  margin-bottom: 8px;
+  margin-bottom: 6px;
+}
+
+.drop span {
+  display: block;
+  color: #a1a1aa;
+  font-size: 14px;
 }
 
 .drop label,
@@ -92,6 +98,17 @@ button:disabled {
   color: #cbd5e1;
 }
 
+.controls .check {
+  display: inline-flex;
+  align-items: center;
+  height: 38px;
+  gap: 7px;
+  padding: 0 10px;
+  border: 1px solid #3f3f46;
+  border-radius: 6px;
+  background: #18181b;
+}
+
 select {
   min-width: 170px;
   height: 38px;
@@ -114,7 +131,7 @@ input[type="range"] {
 }
 
 .stage-scroll {
-  height: calc(100vh - 230px);
+  height: calc(100vh - 245px);
   min-height: 520px;
   border: 1px solid #27272a;
   border-radius: 8px;
@@ -148,13 +165,10 @@ input[type="range"] {
   position: absolute;
   left: 0;
   top: 0;
-  width: 320px;
-  height: 180px;
-  transform-origin: 0 0;
   overflow: hidden;
   pointer-events: none;
   mix-blend-mode: screen;
-  opacity: 0.9;
+  opacity: 0.92;
 }
 
 .mapped.empty {
@@ -165,11 +179,11 @@ input[type="range"] {
 .mapped video {
   width: 100%;
   height: 100%;
-  object-fit: fill;
+  object-fit: cover;
   display: none;
 }
 
-.svg {
+.overlay {
   position: absolute;
   inset: 0;
   width: 100%;
@@ -179,30 +193,49 @@ input[type="range"] {
 }
 
 #poly {
-  fill: rgba(34, 211, 238, 0.14);
+  fill: rgba(34, 211, 238, 0.12);
   stroke: rgba(34, 211, 238, 0.95);
+  stroke-width: 3;
+}
+
+#scanRect {
+  display: none;
+  fill: rgba(255, 255, 255, 0.08);
+  stroke: rgba(255, 255, 255, 0.95);
   stroke-width: 2;
+  stroke-dasharray: 8 6;
+}
+
+.stage.hide-guides #poly,
+.stage.hide-guides #scanRect,
+.stage.hide-guides .pt {
+  display: none;
 }
 
 .pt {
   position: absolute;
-  width: 16px;
-  height: 16px;
+  width: 24px;
+  height: 24px;
   padding: 0;
-  border: 2px solid #ffffff;
+  border: 3px solid #ffffff;
   border-radius: 50%;
   background: #06b6d4;
   transform: translate(-50%, -50%);
   z-index: 20;
   cursor: grab;
+  box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.45);
 }
 
-.pt:active {
-  cursor: grabbing;
+.pt.selected {
+  background: #facc15;
 }
 
 .pt.del {
   background: #ef4444;
+}
+
+.pt:active {
+  cursor: grabbing;
 }
 
 aside {
@@ -218,6 +251,10 @@ aside p {
   gap: 12px;
   padding: 9px 0;
   border-bottom: 1px solid #2a2a30;
+}
+
+aside span {
+  color: #a1a1aa;
 }
 
 aside b {
