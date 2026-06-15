@@ -18,31 +18,31 @@ const bgInfo = document.getElementById("bgInfo");
 const contentInfo = document.getElementById("contentInfo");
 const modeInfo = document.getElementById("modeInfo");
 
-const handles = [
-  document.getElementById("h0"),
-  document.getElementById("h1"),
-  document.getElementById("h2"),
-  document.getElementById("h3"),
-];
+const handles = ["h0", "h1", "h2", "h3"].map((id) => document.getElementById(id));
 
 const files = [];
-let bgUrl = null;
-let contentUrl = null;
+let bgUrl = "";
+let contentUrl = "";
 let activeHandle = null;
 
 let quad = [
-  { x: 160, y: 120 },
-  { x: 640, y: 120 },
-  { x: 640, y: 390 },
-  { x: 160, y: 390 },
+  { x: 120, y: 90 },
+  { x: 520, y: 90 },
+  { x: 520, y: 320 },
+  { x: 120, y: 320 },
 ];
 
+mappedLayer.classList.add("is-empty");
+showHandles(false);
+
 fileInput.addEventListener("change", (event) => {
-  addFiles(Array.from(event.target.files));
+  addFiles(Array.from(event.target.files || []));
+  fileInput.value = "";
 });
 
 folderInput.addEventListener("change", (event) => {
-  addFiles(Array.from(event.target.files));
+  addFiles(Array.from(event.target.files || []));
+  folderInput.value = "";
 });
 
 dropZone.addEventListener("dragover", (event) => {
@@ -59,8 +59,9 @@ dropZone.addEventListener("drop", async (event) => {
   dropZone.classList.remove("is-over");
 
   const items = Array.from(event.dataTransfer.items || []);
+  const droppedFiles = [];
+
   if (items.length && items[0].webkitGetAsEntry) {
-    const droppedFiles = [];
     for (const item of items) {
       const entry = item.webkitGetAsEntry();
       if (entry) {
@@ -68,20 +69,21 @@ dropZone.addEventListener("drop", async (event) => {
         droppedFiles.push(...entryFiles);
       }
     }
-    addFiles(droppedFiles);
   } else {
-    addFiles(Array.from(event.dataTransfer.files || []));
+    droppedFiles.push(...Array.from(event.dataTransfer.files || []));
   }
+
+  addFiles(droppedFiles);
 });
 
 bgSelect.addEventListener("change", () => {
-  const file = files[Number(bgSelect.value)];
-  if (file) setBackground(file);
+  const index = Number(bgSelect.value);
+  if (!Number.isNaN(index) && files[index]) setBackground(files[index]);
 });
 
 contentSelect.addEventListener("change", () => {
-  const file = files[Number(contentSelect.value)];
-  if (file) setContent(file);
+  const index = Number(contentSelect.value);
+  if (!Number.isNaN(index) && files[index]) setContent(files[index]);
 });
 
 resetQuadButton.addEventListener("click", () => {
@@ -115,37 +117,43 @@ handles.forEach((handle, index) => {
   handle.addEventListener("pointerup", () => {
     activeHandle = null;
   });
-});
 
-window.addEventListener("resize", () => {
-  if (backgroundImage.src) {
-    fitQuadToCenter();
-    updateWarp();
-  }
+  handle.addEventListener("pointercancel", () => {
+    activeHandle = null;
+  });
 });
 
 function addFiles(newFiles) {
-  const valid = newFiles.filter((file) =>
-    file.type.startsWith("image/") || file.type.startsWith("video/")
-  );
+  const validFiles = newFiles.filter((file) => {
+    return file && (file.type.startsWith("image/") || file.type.startsWith("video/"));
+  });
 
-  for (const file of valid) {
-    const exists = files.some((item) => item.name === file.name && item.size === file.size);
+  for (const file of validFiles) {
+    const exists = files.some((item) => {
+      return item.name === file.name && item.size === file.size && item.type === file.type;
+    });
+
     if (!exists) files.push(file);
   }
 
   refreshFileUI();
 
-  if (!backgroundImage.src) {
-    const firstImage = files.find((file) => file.type.startsWith("image/"));
-    if (firstImage) setBackground(firstImage);
+  const firstImageIndex = files.findIndex((file) => file.type.startsWith("image/"));
+  const firstContentIndex = files.findIndex((file, index) => {
+    return index !== firstImageIndex && (file.type.startsWith("image/") || file.type.startsWith("video/"));
+  });
+
+  if (!backgroundImage.getAttribute("src") && firstImageIndex >= 0) {
+    bgSelect.value = String(firstImageIndex);
+    setBackground(files[firstImageIndex]);
   }
 
   if (!contentUrl) {
-    const firstContent = files.find((file) => file.type.startsWith("video/")) ||
-      files.find((file) => file.type.startsWith("image/") && file !== getCurrentBgFile());
-
-    if (firstContent) setContent(firstContent);
+    const contentIndex = firstContentIndex >= 0 ? firstContentIndex : firstImageIndex;
+    if (contentIndex >= 0) {
+      contentSelect.value = String(contentIndex);
+      setContent(files[contentIndex]);
+    }
   }
 }
 
@@ -154,14 +162,25 @@ function refreshFileUI() {
   contentSelect.innerHTML = "";
   fileList.innerHTML = "";
 
+  const bgPlaceholder = document.createElement("option");
+  bgPlaceholder.value = "";
+  bgPlaceholder.textContent = "배경을 선택하세요";
+  bgSelect.appendChild(bgPlaceholder);
+
+  const contentPlaceholder = document.createElement("option");
+  contentPlaceholder.value = "";
+  contentPlaceholder.textContent = "콘텐츠를 선택하세요";
+  contentSelect.appendChild(contentPlaceholder);
+
   files.forEach((file, index) => {
-    const label = `${file.type.startsWith("video/") ? "VIDEO" : "IMAGE"} - ${file.name}`;
+    const typeLabel = file.type.startsWith("video/") ? "VIDEO" : "IMAGE";
+    const label = `${typeLabel} - ${file.webkitRelativePath || file.name}`;
 
     if (file.type.startsWith("image/")) {
-      const option = document.createElement("option");
-      option.value = String(index);
-      option.textContent = label;
-      bgSelect.appendChild(option);
+      const bgOption = document.createElement("option");
+      bgOption.value = String(index);
+      bgOption.textContent = label;
+      bgSelect.appendChild(bgOption);
     }
 
     const contentOption = document.createElement("option");
@@ -175,45 +194,51 @@ function refreshFileUI() {
   });
 }
 
-function getCurrentBgFile() {
-  if (!bgSelect.value) return null;
-  return files[Number(bgSelect.value)] || null;
-}
-
 function setBackground(file) {
   if (bgUrl) URL.revokeObjectURL(bgUrl);
   bgUrl = URL.createObjectURL(file);
 
   backgroundImage.onload = () => {
     bgInfo.textContent = file.name;
-    modeInfo.textContent = "배경 적용";
+    modeInfo.textContent = "배경 적용됨";
+
     fitQuadToCenter();
     showHandles(true);
     updateWarp();
+
     resetQuadButton.disabled = false;
     fitButton.disabled = false;
   };
 
   backgroundImage.src = bgUrl;
-
-  const index = files.indexOf(file);
-  if (index >= 0) bgSelect.value = String(index);
 }
 
 function setContent(file) {
   if (contentUrl) URL.revokeObjectURL(contentUrl);
   contentUrl = URL.createObjectURL(file);
 
+  mappedLayer.classList.remove("is-empty");
+  mappedLayer.classList.add("is-active");
+
   mappedImage.style.display = "none";
   mappedVideo.style.display = "none";
+
+  mappedImage.removeAttribute("src");
   mappedVideo.pause();
   mappedVideo.removeAttribute("src");
-  mappedImage.removeAttribute("src");
+  mappedVideo.load();
 
   if (file.type.startsWith("video/")) {
     mappedVideo.src = contentUrl;
     mappedVideo.style.display = "block";
-    mappedVideo.play().catch(() => {});
+    mappedVideo.muted = true;
+    mappedVideo.loop = true;
+    mappedVideo.playsInline = true;
+
+    mappedVideo.play().catch(() => {
+      modeInfo.textContent = "영상 선택됨";
+    });
+
     modeInfo.textContent = "영상 매핑";
   } else {
     mappedImage.src = contentUrl;
@@ -222,34 +247,16 @@ function setContent(file) {
   }
 
   contentInfo.textContent = file.name;
-
-  const index = files.indexOf(file);
-  if (index >= 0) contentSelect.value = String(index);
-
   updateWarp();
-}
-
-function resetQuad() {
-  const rect = stage.getBoundingClientRect();
-  const w = Math.max(320, rect.width * 0.55);
-  const h = Math.max(180, rect.height * 0.38);
-  const x = (rect.width - w) / 2;
-  const y = (rect.height - h) / 2;
-
-  quad = [
-    { x, y },
-    { x: x + w, y },
-    { x: x + w, y: y + h },
-    { x, y: y + h },
-  ];
 }
 
 function fitQuadToCenter() {
   const rect = stage.getBoundingClientRect();
+
   const w = rect.width * 0.5;
-  const h = rect.height * 0.32;
+  const h = Math.max(120, rect.height * 0.32);
   const x = rect.width * 0.25;
-  const y = rect.height * 0.34;
+  const y = Math.max(40, rect.height * 0.32);
 
   quad = [
     { x, y },
@@ -259,8 +266,12 @@ function fitQuadToCenter() {
   ];
 }
 
+function resetQuad() {
+  fitQuadToCenter();
+}
+
 function updateWarp() {
-  if (!backgroundImage.src) return;
+  if (!backgroundImage.getAttribute("src")) return;
 
   const width = 320;
   const height = 180;
@@ -312,35 +323,16 @@ function getProjectiveTransform(src, dst) {
   const h = solveLinearSystem(a, b);
   h.push(1);
 
-  return [
-    h[0], h[1], h[2],
-    h[3], h[4], h[5],
-    h[6], h[7], h[8],
-  ];
+  return h;
 }
 
 function matrixToCss(h) {
-  const a = h[0];
-  const b = h[3];
-  const c = 0;
-  const d = h[6];
-
-  const e = h[1];
-  const f = h[4];
-  const g = 0;
-  const i = h[7];
-
-  const j = 0;
-  const k = 0;
-  const l = 1;
-  const m = 0;
-
-  const n = h[2];
-  const o = h[5];
-  const p = 0;
-  const q = h[8];
-
-  return `matrix3d(${a},${b},${c},${d},${e},${f},${g},${i},${j},${k},${l},${m},${n},${o},${p},${q})`;
+  return `matrix3d(
+    ${h[0]}, ${h[3]}, 0, ${h[6]},
+    ${h[1]}, ${h[4]}, 0, ${h[7]},
+    0, 0, 1, 0,
+    ${h[2]}, ${h[5]}, 0, ${h[8]}
+  )`;
 }
 
 function solveLinearSystem(a, b) {
@@ -350,9 +342,7 @@ function solveLinearSystem(a, b) {
     let maxRow = i;
 
     for (let k = i + 1; k < n; k++) {
-      if (Math.abs(a[k][i]) > Math.abs(a[maxRow][i])) {
-        maxRow = k;
-      }
+      if (Math.abs(a[k][i]) > Math.abs(a[maxRow][i])) maxRow = k;
     }
 
     [a[i], a[maxRow]] = [a[maxRow], a[i]];
@@ -397,7 +387,7 @@ function readEntry(entry) {
       const reader = entry.createReader();
       const all = [];
 
-      function readBatch() {
+      const readBatch = () => {
         reader.readEntries(async (entries) => {
           if (!entries.length) {
             resolve(all);
@@ -411,7 +401,7 @@ function readEntry(entry) {
 
           readBatch();
         }, () => resolve(all));
-      }
+      };
 
       readBatch();
       return;
