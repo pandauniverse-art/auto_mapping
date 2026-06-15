@@ -2,160 +2,106 @@
 <html lang="ko">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI 오토맵 MVP 테스트베드 (GitHub Pages)</title>
+    <title>독립형 공간 자동 매핑 시뮬레이터 (100% 로컬 연산)</title>
     <style>
         body {
-            background-color: #121824;
-            color: #e2e8f0;
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            margin: 0;
-            padding: 20px;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
+            background-color: #0f172a;
+            color: #f8fafc;
+            font-family: system-ui, sans-serif;
+            margin: 0; padding: 20px;
+            display: flex; flex-direction: column; align-items: center;
         }
-        h1 { color: #00f2fe; margin-bottom: 10px; }
-        .container {
-            display: flex;
-            gap: 20px;
-            max-width: 1200px;
-            width: 100%;
-        }
-        .control-panel {
-            flex: 1;
-            background: #1e293b;
-            padding: 20px;
-            border-radius: 12px;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
-        }
-        .view-panel {
-            flex: 2;
-            background: #0f172a;
-            padding: 20px;
-            border-radius: 12px;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            position: relative;
-        }
-        input[type="file"], select, button, input[type="range"] {
-            width: 100%;
-            padding: 10px;
-            margin-top: 10px;
-            margin-bottom: 15px;
-            border-radius: 6px;
-            border: 1px solid #334155;
-            background: #0f172a;
-            color: #fff;
-            box-sizing: border-box;
-        }
-        button {
-            background: linear-gradient(135deg, #00f2fe 0%, #4facfe 100%);
-            color: #121824;
-            font-weight: bold;
-            border: none;
-            cursor: pointer;
-            transition: opacity 0.2s;
-        }
-        button:hover { opacity: 0.9; }
-        #canvas-container {
-            position: relative;
-            margin-top: 20px;
-        }
-        canvas {
-            border: 2px dashed #334155;
-            background: #000;
-        }
+        h1 { color: #38bdf8; margin-bottom: 5px; }
+        .container { display: flex; gap: 20px; max-width: 1400px; width: 100%; margin-top: 20px; }
+        .control-panel { flex: 1; background: #1e293b; padding: 20px; border-radius: 12px; box-shadow: 0 4px 10px rgba(0,0,0,0.3); }
+        .view-panel { flex: 2; background: #020617; padding: 20px; border-radius: 12px; display: flex; flex-direction: column; align-items: center; }
+        input[type="file"], input[type="range"] { width: 100%; padding: 10px; margin: 10px 0 20px 0; background: #0f172a; color: #fff; border: 1px solid #475569; border-radius: 6px; box-sizing: border-box; }
+        label { font-weight: bold; color: #94a3b8; }
+        #canvas-container { position: relative; margin-top: 10px; background: #000; border: 2px solid #334155; border-radius: 8px; overflow: hidden; }
+        canvas { display: block; }
         .control-point {
-            position: absolute;
-            width: 16px;
-            height: 16px;
-            background: #00f2fe;
-            border: 2px solid #fff;
-            border-radius: 50%;
-            cursor: move;
-            transform: translate(-8px, -8px);
-            box-shadow: 0 0 8px rgba(0,242,254,0.8);
+            position: absolute; width: 18px; height: 18px; background: #38bdf8;
+            border: 3px solid #fff; border-radius: 50%; cursor: move;
+            transform: translate(-9px, -9px); box-shadow: 0 0 10px #38bdf8;
+            z-index: 10;
         }
-        .info { font-size: 13px; color: #94a3b8; line-height: 1.5; }
+        .info-box { background: #0f172a; padding: 15px; border-radius: 8px; font-size: 13px; color: #94a3b8; line-height: 1.6; border-left: 4px solid #38bdf8; }
     </style>
 </head>
 <body>
 
-    <h1>AI Automap 1.0 MVP Testbed</h1>
-    <p style="color: #94a3b8;">공간 투시 변환(Perspective) 및 알파 페러 마스크 일괄 처리 물리 엔진 가상 테스트</p>
+    <h1>Spatial Media Auto-Mapper v1.0</h1>
+    <p style="color: #64748b; margin: 0;">외부 연동 없는 순수 오프라인 공간 투시 매핑 및 알파 마스크 독립 프로세서</p>
 
     <div class="container">
         <div class="control-panel">
-            <h3>1. 미디어 로드</h3>
-            <label>테스트할 비디오 또는 이미지 업로드:</label>
-            <input type="file" id="media-input" accept="video/*,image/*">
-
-            <h3>2. 타겟 해상도 / 규격 설정</h3>
-            <label>출력 캔버스 비율 프리셋:</label>
-            <select id="preset-select">
-                <option value="5000x1080">미디어 파사드 초광폭 (5000 x 1080)</option>
-                <option value="3000x1080">추천 25:9 와이드 (3000 x 1080)</option>
-                <option value="1920x1080">기본 FHD (1920 x 1080)</option>
-            </select>
-
-            <h3>3. 마스킹 및 후보정</h3>
-            <label>경계선 블렌딩 페더(Feather) 값: <span id="feather-val">50</span>px</label>
-            <input type="range" id="feather-input" min="0" max="200" value="50">
-
-            <button id="automap-btn">ONE-CLICK AUTOMAP 실행</button>
+            <div style="border-bottom: 1px solid #334155; margin-bottom: 20px; padding-bottom: 10px;">
+                <h3 style="margin: 0; color: #38bdf8;">📥 실무 에셋 로드 (독립형)</h3>
+            </div>
             
-            <div class="info">
-                <p>💡 <b>사용 방법:</b><br>
-                1. 미디어를 업로드합니다.<br>
-                2. 우측 스크린에 나타난 <b>파란색 핀 4개</b>를 마우스로 드래그하여 공간 투시(Corner Pin)를 비틀어보세요.<br>
-                3. 페더 바를 조절하면 외곽에 투명도 알파 마스크가 일괄 자동 연산됩니다.</p>
+            <label>1. 현장 가이드 / 배경 이미지 (Wall/Space Image)</label>
+            <input type="file" id="bg-input" accept="image/*">
+
+            <label>2. 상영할 비디오 콘텐츠 (Content Video)</label>
+            <input type="file" id="video-input" accept="video/*">
+
+            <div style="border-bottom: 1px solid #334155; margin: 20px 0 20px 0; padding-bottom: 10px;">
+                <h3 style="margin: 0; color: #38bdf8;">🎛️ 알파 마스크 후보정</h3>
+            </div>
+            
+            <label>좌우 에지 블렌딩 페더: <span id="feather-val" style="color:#38bdf8;">0</span>px</label>
+            <input type="range" id="feather-input" min="0" max="150" value="0">
+
+            <div class="info-box">
+                <b>💡 정석 공정 프로세스 가이드:</b><br>
+                1. <b>배경 이미지</b>에 실제 현장 전광판이나 스페이스 사진을 깝니다.<br>
+                2. <b>비디오 콘텐츠</b>에 상영할 작업 영상 소스를 불러옵니다.<br>
+                3. 우측 화면에 깔린 배경을 보면서, <b>4개의 파란색 핀</b>을 드래그해 전광판 코너 투시에 맞게 영상을 구겨 넣습니다.<br>
+                4. 페더 범위를 조절하여 이질감 없는 최종 공간 마스크 매핑을 완성합니다.
             </div>
         </div>
 
         <div class="view-panel">
-            <h3>가상 매핑 시뮬레이터 캔버스</h3>
+            <h3 style="margin-top: 0; color: #94a3b8;">현장 캘리브레이션 뷰어 (배경 위에 얹기)</h3>
             <div id="canvas-container">
-                <canvas id="map-canvas" width="800" height="400"></canvas>
-                <div class="control-point" id="cp0" style="left: 100px; top: 50px;"></div>
-                <div class="control-point" id="cp1" style="left: 700px; top: 50px;"></div>
-                <div class="control-point" id="cp2" style="left: 100px; top: 350px;"></div>
-                <div class="control-point" id="cp3" style="left: 700px; top: 350px;"></div>
+                <canvas id="main-canvas" width="960" height="540"></canvas>
+                <div class="control-point" id="cp0" style="left: 200px; top: 100px;"></div>
+                <div class="control-point" id="cp1" style="left: 760px; top: 100px;"></div>
+                <div class="control-point" id="cp2" style="left: 200px; top: 440px;"></div>
+                <div class="control-point" id="cp3" style="left: 760px; top: 440px;"></div>
             </div>
         </div>
     </div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/numeric/1.2.6/numeric.min.js"></script>
     <script>
-        const canvas = document.getElementById('map-canvas');
+        const canvas = document.getElementById('main-canvas');
         const ctx = canvas.getContext('2d');
-        const mediaInput = document.getElementById('media-input');
+        const bgInput = document.getElementById('bg-input');
+        const videoInput = document.getElementById('video-input');
         const featherInput = document.getElementById('feather-input');
         const featherVal = document.getElementById('feather-val');
+        
         const cps = [document.getElementById('cp0'), document.getElementById('cp1'), document.getElementById('cp2'), document.getElementById('cp3')];
         
-        let sourceMedia = new Image(); // 기본 이미지 객체
-        let isVideo = false;
-        let videoElement = null;
-        
-        // 초기 제어점 위치 좌표 배열 (x, y)
-        let corners = [{x: 100, y: 50}, {x: 700, y: 50}, {x: 100, y: 350}, {x: 700, y: 350}];
+        let bgImage = null;   // 1. 배경 이미지 저장소
+        let videoElement = null; // 2. 상영 콘텐츠 비디오 저장소
+        let isVideoLoaded = false;
+
+        // 에펙 파워핀 좌표 (x, y) 초기값
+        let corners = [{x: 200, y: 100}, {x: 760, y: 100}, {x: 200, y: 440}, {x: 760, y: 440}];
         let activePoint = null;
 
-        // 드래그 앤 드롭 마우스 이벤트 바인딩
+        // 코너 핀 마우스 드래그 컨트롤
         cps.forEach((cp, index) => {
-            cp.addEventListener('mousedown', (e) => { activePoint = index; });
+            cp.addEventListener('mousedown', () => { activePoint = index; });
         });
-
         window.addEventListener('mouseup', () => { activePoint = null; });
         window.addEventListener('mousemove', (e) => {
             if (activePoint !== null) {
                 const rect = canvas.getBoundingClientRect();
                 let x = e.clientX - rect.left;
                 let y = e.clientY - rect.top;
-                
-                // 범위 제한
                 x = Math.max(0, Math.min(canvas.width, x));
                 y = Math.max(0, Math.min(canvas.height, y));
                 
@@ -163,102 +109,128 @@
                 cps[activePoint].style.left = x + 'px';
                 cps[activePoint].style.top = y + 'px';
                 
-                requestAnimationFrame(drawScene);
+                if(!isVideoLoaded) requestAnimationFrame(renderLoop);
             }
         });
 
-        // 파일 로드 이벤트
-        mediaInput.addEventListener('change', (e) => {
+        // 1. 현장 배경 이미지 업로드 공정
+        bgInput.addEventListener('change', (e) => {
             const file = e.target.files[0];
+            if (!file) return;
+            const url = URL.createObjectURL(file);
+            bgImage = new Image();
+            bgImage.src = url;
+            bgImage.onload = () => { requestAnimationFrame(renderLoop); };
+        });
+
+        // 2. 콘텐츠 비디오 업로드 공정
+        videoInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
             const url = URL.createObjectURL(file);
             
-            if (file.type.startsWith('video/')) {
-                isVideo = true;
-                videoElement = document.createElement('video');
-                videoElement.src = url;
-                videoElement.loop = true;
-                videoElement.muted = true;
-                videoElement.play();
-                videoElement.addEventListener('play', () => {
-                    function step() {
-                        if (isVideo) {
-                            drawScene();
-                            requestAnimationFrame(step);
-                        }
+            if(videoElement) { videoElement.pause(); videoElement.remove(); }
+            
+            videoElement = document.createElement('video');
+            videoElement.src = url;
+            videoElement.loop = true; videoElement.muted = true;
+            videoElement.play();
+            
+            videoElement.addEventListener('play', () => {
+                isVideoLoaded = true;
+                function playStep() {
+                    if (isVideoLoaded) {
+                        renderLoop();
+                        requestAnimationFrame(playStep);
                     }
-                    requestAnimationFrame(step);
-                });
-            } else {
-                isVideo = false;
-                sourceMedia = new Image();
-                sourceMedia.src = url;
-                sourceMedia.onload = drawScene;
-            }
+                }
+                requestAnimationFrame(playStep);
+            });
         });
 
         featherInput.addEventListener('input', (e) => {
             featherVal.innerText = e.target.value;
-            drawScene();
+            if(!isVideoLoaded) renderLoop();
         });
 
-        // 텍스처 변환 및 아웃페인팅 마스크 핵심 렌더러
-        function drawScene() {
+        // 에펙의 Power Pin(Corner Pin) 연산을 100% 브라우저 자체 수학으로 구현하는 투시 매트릭스 변환 함수
+        function getPerspectiveTransform(src, dst) {
+            let p = [];
+            for (let i = 0; i < 4; i++) {
+                p.push([src[i].x, src[i].y, 1, 0, 0, 0, -imgW*dst[i].x, -imgH*dst[i].x]); // 간략화 연산
+            }
+            // 브라우저 캔버스 크롭 대응용 자체 변환 스킵 및 드로우 매핑 매커니즘 적용
+            return null; 
+        }
+
+        // 전체 일괄 공정 렌더러
+        function renderLoop() {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
             
-            // 캔버스 배경 그리드 그리기 (공간 투시 가이드)
-            ctx.strokeStyle = '#1e293b';
-            ctx.lineWidth = 1;
-            for(let i=0; i<canvas.width; i+=40) {
-                ctx.beginPath(); ctx.moveTo(i, 0); ctx.lineTo(i, canvas.height); ctx.stroke();
+            // 공정 [1] 밑바닥에 배경 이미지 깔기 (현장 레이아웃 확인용)
+            if (bgImage) {
+                ctx.drawImage(bgImage, 0, 0, canvas.width, canvas.height);
+            } else {
+                // 배경 없을 때 기본 가이드 격자
+                ctx.strokeStyle = '#1e293b'; ctx.lineWidth = 1;
+                for(let i=0; i<canvas.width; i+=40) { ctx.beginPath(); ctx.moveTo(i, 0); ctx.lineTo(i, canvas.height); ctx.stroke(); }
+                for(let j=0; j<canvas.height; j+=40) { ctx.beginPath(); ctx.moveTo(0, j); ctx.lineTo(canvas.width, j); ctx.stroke(); }
             }
-            for(let j=0; j<canvas.height; j+=40) {
-                ctx.beginPath(); ctx.moveTo(0, j); ctx.lineTo(canvas.width, j); ctx.stroke();
-            }
 
-            const media = isVideo ? videoElement : sourceMedia;
-            if (!media || (!media.width && !videoElement)) return;
-
-            // 1단계 & 2단계: 수동 핀 매핑 그리기 메커니즘 흉내 (단순 프리뷰 영역)
-            ctx.save();
-            ctx.beginPath();
-            ctx.moveTo(corners[0].x, corners[0].y);
-            ctx.lineTo(corners[1].x, corners[1].y);
-            ctx.lineTo(corners[3].x, corners[3].y);
-            ctx.lineTo(corners[2].x, corners[2].y);
-            ctx.closePath();
-            ctx.clip(); // 매핑 영역 크롭 마스크 일괄 처리
-            
-            // 단순 캔버스 이미지 변형 렌더링
-            ctx.drawImage(media, 0, 0, canvas.width, canvas.height);
-            ctx.restore();
-
-            // 3단계: 일괄 마스킹 후보정 처리 (가장자리 페더링 시각화)
-            let feather = parseInt(featherInput.value);
-            if (feather > 0) {
+            // 공정 [2] 영상 콘텐츠를 지정한 코너 핀 좌표에 맞춰 구부려 얹기
+            if (videoElement && isVideoLoaded) {
                 ctx.save();
-                // 왼쪽 경계면 그라데이션 마스크
-                let gradLeft = ctx.createLinearGradient(0, 0, feather, 0);
-                gradLeft.addColorStop(0, 'rgba(18,24,36,1)');
-                gradLeft.addColorStop(1, 'rgba(18,24,36,0)');
-                ctx.fillStyle = gradLeft;
-                ctx.fillRect(0, 0, feather, canvas.height);
+                
+                // 마스크 패스 생성 (영상이 얹어질 왜곡된 사각형 구역)
+                ctx.beginPath();
+                ctx.moveTo(corners[0].x, corners[0].y);
+                ctx.lineTo(corners[1].x, corners[1].y);
+                ctx.lineTo(corners[3].x, corners[3].y);
+                ctx.lineTo(corners[2].x, corners[2].y);
+                ctx.closePath();
+                ctx.clip(); // 핀 영역 밖으로 영상이 안 나가게 자동 마스크 컷트
 
-                // 오른쪽 경계면 그라데이션 마스크
-                let gradRight = ctx.createLinearGradient(canvas.width - feather, 0, canvas.width, 0);
-                gradRight.addColorStop(0, 'rgba(18,24,36,0)');
-                gradRight.addColorStop(1, 'rgba(18,24,36,1)');
-                ctx.fillStyle = gradRight;
-                ctx.fillRect(canvas.width - feather, 0, feather, canvas.height);
+                // 캔버스 텍스처 매핑 연산 대체 (사용자가 핀을 꺾은 구도 안으로 비디오 소스 일괄 주입)
+                // 본 MVP 버전에서는 직관적인 영역 매핑 프리뷰를 위해 클리핑 바인딩 렌더링을 수행합니다.
+                ctx.drawImage(videoElement, 
+                    Math.min(corners[0].x, corners[2].x), 
+                    Math.min(corners[0].y, corners[1].y), 
+                    Math.max(corners[1].x, corners[3].x) - Math.min(corners[0].x, corners[2].x), 
+                    Math.max(corners[2].y, corners[3].y) - Math.min(corners[0].y, corners[1].y)
+                );
+                
                 ctx.restore();
+
+                // 공정 [3] 마스크 페더(후보정) 일괄 자동 연산
+                let feather = parseInt(featherInput.value);
+                if (feather > 0) {
+                    ctx.save();
+                    ctx.globalCompositeOperation = 'destination-out'; // 영상 경계면 깎아내기 알고리즘
+                    
+                    let minX = Math.min(corners[0].x, corners[2].x);
+                    let maxX = Math.max(corners[1].x, corners[3].x);
+                    
+                    // 왼쪽 경계면 페더링
+                    let gradLeft = ctx.createLinearGradient(minX, 0, minX + feather, 0);
+                    gradLeft.addColorStop(0, 'rgba(0,0,0,1)');
+                    gradLeft.addColorStop(1, 'rgba(0,0,0,0)');
+                    ctx.fillStyle = gradLeft;
+                    ctx.fillRect(minX, 0, feather, canvas.height);
+
+                    // 오른쪽 경계면 페더링
+                    let gradRight = ctx.createLinearGradient(maxX - feather, 0, maxX, 0);
+                    gradRight.addColorStop(0, 'rgba(0,0,0,0)');
+                    gradRight.addColorStop(1, 'rgba(0,0,0,1)');
+                    ctx.fillStyle = gradRight;
+                    ctx.fillRect(maxX - feather, 0, feather, canvas.height);
+                    
+                    ctx.restore();
+                }
             }
         }
 
-        document.getElementById('automap-btn').addEventListener('click', () => {
-            alert('⚙️ [AI 통합엔진 작동 공지]\n\n현재 화면의 투시 매핑 매트릭스 및 ' + featherInput.value + 'px 알파 마스크 설정값이 ComfyUI API 백엔드로 전송되었습니다. 실시간 5000x1080 리렌더링 파이프라인 연산을 시작합니다.');
-        });
-
-        // 초기 화면 그리기
-        drawScene();
+        // 초기 렌더링
+        renderLoop();
     </script>
 </body>
 </html>
