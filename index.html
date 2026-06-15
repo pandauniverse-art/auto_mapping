@@ -18,11 +18,13 @@
     <section id="dropZone" class="drop-zone">
       <strong>이미지/영상 파일 또는 폴더를 여기로 드래그</strong>
       <span>배경 이미지, 파사드 이미지/영상 파일을 한 번에 넣을 수 있습니다.</span>
+
       <div class="file-actions">
         <label>
           파일 선택
           <input id="fileInput" type="file" multiple accept="image/*,video/*" />
         </label>
+
         <label>
           폴더 선택
           <input id="folderInput" type="file" webkitdirectory directory multiple />
@@ -33,12 +35,16 @@
     <section class="controls">
       <label>
         배경 이미지
-        <select id="bgSelect"></select>
+        <select id="bgSelect">
+          <option value="">배경을 선택하세요</option>
+        </select>
       </label>
 
       <label>
         파사드 콘텐츠
-        <select id="contentSelect"></select>
+        <select id="contentSelect">
+          <option value="">콘텐츠를 선택하세요</option>
+        </select>
       </label>
 
       <button id="resetQuadButton" disabled>공간 핸들 초기화</button>
@@ -47,10 +53,11 @@
 
     <section class="workspace">
       <div id="stage" class="stage">
-        <img id="backgroundImage" alt="" />
-        <div id="mappedLayer" class="mapped-layer">
-          <img id="mappedImage" alt="" />
-          <video id="mappedVideo" muted loop playsinline controls></video>
+        <img id="backgroundImage" alt="배경 이미지" />
+
+        <div id="mappedLayer" class="mapped-layer is-empty">
+          <img id="mappedImage" alt="매핑 이미지" />
+          <video id="mappedVideo" muted loop playsinline></video>
         </div>
 
         <button class="handle" id="h0" aria-label="top left"></button>
@@ -64,14 +71,17 @@
         <div id="fileList" class="file-list"></div>
 
         <h2>매핑 상태</h2>
+
         <div class="stat">
           <span>배경</span>
           <strong id="bgInfo">없음</strong>
         </div>
+
         <div class="stat">
           <span>콘텐츠</span>
           <strong id="contentInfo">없음</strong>
         </div>
+
         <div class="stat">
           <span>모드</span>
           <strong id="modeInfo">대기</strong>
