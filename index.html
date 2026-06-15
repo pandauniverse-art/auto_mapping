@@ -2,97 +2,99 @@
 <html lang="ko">
 <head>
     <meta charset="UTF-8">
-    <title>독립형 공간 자동 매핑 시뮬레이터 (100% 로컬 연산)</title>
+    <title>미디어 파사드 현장 목업 자동 합성기</title>
     <style>
         body {
-            background-color: #0f172a;
-            color: #f8fafc;
-            font-family: system-ui, sans-serif;
-            margin: 0; padding: 20px;
-            display: flex; flex-direction: column; align-items: center;
+            background-color: #0f172a; color: #f8fafc; font-family: system-ui, sans-serif;
+            margin: 0; padding: 20px; display: flex; flex-direction: column; align-items: center;
         }
         h1 { color: #38bdf8; margin-bottom: 5px; }
         .container { display: flex; gap: 20px; max-width: 1400px; width: 100%; margin-top: 20px; }
-        .control-panel { flex: 1; background: #1e293b; padding: 20px; border-radius: 12px; box-shadow: 0 4px 10px rgba(0,0,0,0.3); }
-        .view-panel { flex: 2; background: #020617; padding: 20px; border-radius: 12px; display: flex; flex-direction: column; align-items: center; }
-        input[type="file"], input[type="range"] { width: 100%; padding: 10px; margin: 10px 0 20px 0; background: #0f172a; color: #fff; border: 1px solid #475569; border-radius: 6px; box-sizing: border-box; }
-        label { font-weight: bold; color: #94a3b8; }
-        #canvas-container { position: relative; margin-top: 10px; background: #000; border: 2px solid #334155; border-radius: 8px; overflow: hidden; }
-        canvas { display: block; }
+        .control-panel { flex: 1; background: #1e293b; padding: 20px; border-radius: 12px; box-shadow: 0 4px 10px rgba(0,0,0,0.5); }
+        .view-panel { flex: 2.5; background: #020617; padding: 20px; border-radius: 12px; position: relative; display: flex; justify-content: center; align-items: center; }
+        input[type="file"], input[type="range"], select { width: 100%; padding: 10px; margin: 8px 0 20px 0; background: #0f172a; color: #fff; border: 1px solid #475569; border-radius: 6px; box-sizing: border-box; }
+        label { font-weight: bold; color: #94a3b8; font-size: 14px; }
+        .value-disp { color: #38bdf8; font-weight: bold; }
+        #canvas-container { position: relative; box-shadow: 0 0 20px rgba(0,0,0,0.8); }
+        canvas { display: block; border-radius: 4px; }
         .control-point {
-            position: absolute; width: 18px; height: 18px; background: #38bdf8;
-            border: 3px solid #fff; border-radius: 50%; cursor: move;
-            transform: translate(-9px, -9px); box-shadow: 0 0 10px #38bdf8;
+            position: absolute; width: 16px; height: 16px; background: #38bdf8;
+            border: 2px solid #fff; border-radius: 50%; cursor: move;
+            transform: translate(-8px, -8px); box-shadow: 0 0 10px rgba(56, 189, 248, 0.8);
             z-index: 10;
         }
-        .info-box { background: #0f172a; padding: 15px; border-radius: 8px; font-size: 13px; color: #94a3b8; line-height: 1.6; border-left: 4px solid #38bdf8; }
+        .section-title { border-bottom: 1px solid #334155; margin: 20px 0 15px 0; padding-bottom: 8px; color: #38bdf8; font-size: 1.1em; font-weight: bold; }
     </style>
 </head>
 <body>
 
-    <h1>Spatial Media Auto-Mapper v1.0</h1>
-    <p style="color: #64748b; margin: 0;">외부 연동 없는 순수 오프라인 공간 투시 매핑 및 알파 마스크 독립 프로세서</p>
+    <h1>🎬 Media Facade Pre-viz Auto-Mapper</h1>
+    <p style="color: #64748b; margin: 0;">실제 현장 촬영본(Mock-up) 퀄리티의 프로젝션 매핑 실시간 자동 합성 툴</p>
 
     <div class="container">
         <div class="control-panel">
-            <div style="border-bottom: 1px solid #334155; margin-bottom: 20px; padding-bottom: 10px;">
-                <h3 style="margin: 0; color: #38bdf8;">📥 실무 에셋 로드 (독립형)</h3>
-            </div>
-            
-            <label>1. 현장 가이드 / 배경 이미지 (Wall/Space Image)</label>
+            <div class="section-title" style="margin-top:0;">1. 에셋 로드 (현장 & 콘텐츠)</div>
+            <label>🖼️ 현장 배경 사진 (Wall/Space)</label>
             <input type="file" id="bg-input" accept="image/*">
 
-            <label>2. 상영할 비디오 콘텐츠 (Content Video)</label>
+            <label>🎞️ 상영할 미디어 아트 (Video)</label>
             <input type="file" id="video-input" accept="video/*">
 
-            <div style="border-bottom: 1px solid #334155; margin: 20px 0 20px 0; padding-bottom: 10px;">
-                <h3 style="margin: 0; color: #38bdf8;">🎛️ 알파 마스크 후보정</h3>
-            </div>
+            <div class="section-title">2. 리얼리티 합성 보정 (Photorealism)</div>
             
-            <label>좌우 에지 블렌딩 페더: <span id="feather-val" style="color:#38bdf8;">0</span>px</label>
-            <input type="range" id="feather-input" min="0" max="150" value="0">
+            <label>✨ 빛 블렌딩 모드 (프로젝터 효과)</label>
+            <select id="blend-mode">
+                <option value="screen">Screen (스크린 - 실제 빔프로젝터 느낌)</option>
+                <option value="lighter">Lighter (라이터 - 강한 발광체/LED 느낌)</option>
+                <option value="source-over">Normal (노멀 - 단순 덮어쓰기)</option>
+            </select>
 
-            <div class="info-box">
-                <b>💡 정석 공정 프로세스 가이드:</b><br>
-                1. <b>배경 이미지</b>에 실제 현장 전광판이나 스페이스 사진을 깝니다.<br>
-                2. <b>비디오 콘텐츠</b>에 상영할 작업 영상 소스를 불러옵니다.<br>
-                3. 우측 화면에 깔린 배경을 보면서, <b>4개의 파란색 핀</b>을 드래그해 전광판 코너 투시에 맞게 영상을 구겨 넣습니다.<br>
-                4. 페더 범위를 조절하여 이질감 없는 최종 공간 마스크 매핑을 완성합니다.
-            </div>
+            <label>🌟 주변부 환경광(Glow Spill): <span id="glow-val" class="value-disp">30</span>px</label>
+            <input type="range" id="glow-input" min="0" max="150" value="30">
+
+            <label>🌫️ 영상 투명도 (Opacity): <span id="opacity-val" class="value-disp">90</span>%</label>
+            <input type="range" id="opacity-input" min="10" max="100" value="90">
+
+            <label>✂️ 경계선 페더 (Edge Softness): <span id="feather-val" class="value-disp">10</span>px</label>
+            <input type="range" id="feather-input" min="0" max="100" value="10">
         </div>
 
         <div class="view-panel">
-            <h3 style="margin-top: 0; color: #94a3b8;">현장 캘리브레이션 뷰어 (배경 위에 얹기)</h3>
             <div id="canvas-container">
                 <canvas id="main-canvas" width="960" height="540"></canvas>
-                <div class="control-point" id="cp0" style="left: 200px; top: 100px;"></div>
-                <div class="control-point" id="cp1" style="left: 760px; top: 100px;"></div>
-                <div class="control-point" id="cp2" style="left: 200px; top: 440px;"></div>
-                <div class="control-point" id="cp3" style="left: 760px; top: 440px;"></div>
+                <div class="control-point" id="cp0" style="left: 150px; top: 100px;"></div>
+                <div class="control-point" id="cp1" style="left: 810px; top: 100px;"></div>
+                <div class="control-point" id="cp2" style="left: 150px; top: 440px;"></div>
+                <div class="control-point" id="cp3" style="left: 810px; top: 440px;"></div>
             </div>
         </div>
     </div>
 
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/numeric/1.2.6/numeric.min.js"></script>
     <script>
         const canvas = document.getElementById('main-canvas');
         const ctx = canvas.getContext('2d');
+        
+        // UI 요소를 변수에 바인딩
         const bgInput = document.getElementById('bg-input');
         const videoInput = document.getElementById('video-input');
+        const blendModeSelect = document.getElementById('blend-mode');
+        const glowInput = document.getElementById('glow-input');
+        const glowVal = document.getElementById('glow-val');
+        const opacityInput = document.getElementById('opacity-input');
+        const opacityVal = document.getElementById('opacity-val');
         const featherInput = document.getElementById('feather-input');
         const featherVal = document.getElementById('feather-val');
         
         const cps = [document.getElementById('cp0'), document.getElementById('cp1'), document.getElementById('cp2'), document.getElementById('cp3')];
         
-        let bgImage = null;   // 1. 배경 이미지 저장소
-        let videoElement = null; // 2. 상영 콘텐츠 비디오 저장소
+        let bgImage = null;
+        let videoElement = null;
         let isVideoLoaded = false;
 
-        // 에펙 파워핀 좌표 (x, y) 초기값
-        let corners = [{x: 200, y: 100}, {x: 760, y: 100}, {x: 200, y: 440}, {x: 760, y: 440}];
+        let corners = [{x: 150, y: 100}, {x: 810, y: 100}, {x: 150, y: 440}, {x: 810, y: 440}];
         let activePoint = null;
 
-        // 코너 핀 마우스 드래그 컨트롤
+        // 드래그 로직
         cps.forEach((cp, index) => {
             cp.addEventListener('mousedown', () => { activePoint = index; });
         });
@@ -100,136 +102,123 @@
         window.addEventListener('mousemove', (e) => {
             if (activePoint !== null) {
                 const rect = canvas.getBoundingClientRect();
-                let x = e.clientX - rect.left;
-                let y = e.clientY - rect.top;
-                x = Math.max(0, Math.min(canvas.width, x));
-                y = Math.max(0, Math.min(canvas.height, y));
+                let x = Math.max(0, Math.min(canvas.width, e.clientX - rect.left));
+                let y = Math.max(0, Math.min(canvas.height, e.clientY - rect.top));
                 
                 corners[activePoint] = {x, y};
                 cps[activePoint].style.left = x + 'px';
                 cps[activePoint].style.top = y + 'px';
-                
-                if(!isVideoLoaded) requestAnimationFrame(renderLoop);
+                if(!isVideoLoaded) renderLoop();
             }
         });
 
-        // 1. 현장 배경 이미지 업로드 공정
+        // 배경 및 영상 로드
         bgInput.addEventListener('change', (e) => {
             const file = e.target.files[0];
             if (!file) return;
-            const url = URL.createObjectURL(file);
             bgImage = new Image();
-            bgImage.src = url;
-            bgImage.onload = () => { requestAnimationFrame(renderLoop); };
+            bgImage.src = URL.createObjectURL(file);
+            bgImage.onload = () => { renderLoop(); };
         });
 
-        // 2. 콘텐츠 비디오 업로드 공정
         videoInput.addEventListener('change', (e) => {
             const file = e.target.files[0];
             if (!file) return;
-            const url = URL.createObjectURL(file);
-            
             if(videoElement) { videoElement.pause(); videoElement.remove(); }
             
             videoElement = document.createElement('video');
-            videoElement.src = url;
+            videoElement.src = URL.createObjectURL(file);
             videoElement.loop = true; videoElement.muted = true;
             videoElement.play();
             
             videoElement.addEventListener('play', () => {
                 isVideoLoaded = true;
-                function playStep() {
-                    if (isVideoLoaded) {
-                        renderLoop();
-                        requestAnimationFrame(playStep);
-                    }
-                }
+                function playStep() { if (isVideoLoaded) { renderLoop(); requestAnimationFrame(playStep); } }
                 requestAnimationFrame(playStep);
             });
         });
 
-        featherInput.addEventListener('input', (e) => {
-            featherVal.innerText = e.target.value;
-            if(!isVideoLoaded) renderLoop();
+        // 슬라이더 UI 업데이트
+        [glowInput, opacityInput, featherInput, blendModeSelect].forEach(el => {
+            el.addEventListener('input', () => {
+                glowVal.innerText = glowInput.value;
+                opacityVal.innerText = opacityInput.value;
+                featherVal.innerText = featherInput.value;
+                if(!isVideoLoaded) renderLoop();
+            });
         });
 
-        // 에펙의 Power Pin(Corner Pin) 연산을 100% 브라우저 자체 수학으로 구현하는 투시 매트릭스 변환 함수
-        function getPerspectiveTransform(src, dst) {
-            let p = [];
-            for (let i = 0; i < 4; i++) {
-                p.push([src[i].x, src[i].y, 1, 0, 0, 0, -imgW*dst[i].x, -imgH*dst[i].x]); // 간략화 연산
-            }
-            // 브라우저 캔버스 크롭 대응용 자체 변환 스킵 및 드로우 매핑 매커니즘 적용
-            return null; 
-        }
-
-        // 전체 일괄 공정 렌더러
+        // ✨ 메인 렌더링 루프 (리얼리티 합성 알고리즘)
         function renderLoop() {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
             
-            // 공정 [1] 밑바닥에 배경 이미지 깔기 (현장 레이아웃 확인용)
+            // 1. 베이스 레이어: 현장 배경 사진 렌더링 (Normal 모드)
+            ctx.globalCompositeOperation = 'source-over';
+            ctx.globalAlpha = 1.0;
+            ctx.filter = 'none';
             if (bgImage) {
                 ctx.drawImage(bgImage, 0, 0, canvas.width, canvas.height);
             } else {
-                // 배경 없을 때 기본 가이드 격자
-                ctx.strokeStyle = '#1e293b'; ctx.lineWidth = 1;
-                for(let i=0; i<canvas.width; i+=40) { ctx.beginPath(); ctx.moveTo(i, 0); ctx.lineTo(i, canvas.height); ctx.stroke(); }
-                for(let j=0; j<canvas.height; j+=40) { ctx.beginPath(); ctx.moveTo(0, j); ctx.lineTo(canvas.width, j); ctx.stroke(); }
+                ctx.fillStyle = '#1e293b'; ctx.fillRect(0, 0, canvas.width, canvas.height);
             }
 
-            // 공정 [2] 영상 콘텐츠를 지정한 코너 핀 좌표에 맞춰 구부려 얹기
             if (videoElement && isVideoLoaded) {
-                ctx.save();
-                
-                // 마스크 패스 생성 (영상이 얹어질 왜곡된 사각형 구역)
-                ctx.beginPath();
-                ctx.moveTo(corners[0].x, corners[0].y);
-                ctx.lineTo(corners[1].x, corners[1].y);
-                ctx.lineTo(corners[3].x, corners[3].y);
-                ctx.lineTo(corners[2].x, corners[2].y);
-                ctx.closePath();
-                ctx.clip(); // 핀 영역 밖으로 영상이 안 나가게 자동 마스크 컷트
+                // 바운딩 박스 계산
+                let minX = Math.min(corners[0].x, corners[2].x);
+                let minY = Math.min(corners[0].y, corners[1].y);
+                let w = Math.max(corners[1].x, corners[3].x) - minX;
+                let h = Math.max(corners[2].y, corners[3].y) - minY;
 
-                // 캔버스 텍스처 매핑 연산 대체 (사용자가 핀을 꺾은 구도 안으로 비디오 소스 일괄 주입)
-                // 본 MVP 버전에서는 직관적인 영역 매핑 프리뷰를 위해 클리핑 바인딩 렌더링을 수행합니다.
-                ctx.drawImage(videoElement, 
-                    Math.min(corners[0].x, corners[2].x), 
-                    Math.min(corners[0].y, corners[1].y), 
-                    Math.max(corners[1].x, corners[3].x) - Math.min(corners[0].x, corners[2].x), 
-                    Math.max(corners[2].y, corners[3].y) - Math.min(corners[0].y, corners[1].y)
-                );
-                
+                // 2. 환경광 레이어: 주변 바닥/천장에 빛 번짐(Glow Spill) 생성
+                let glow = parseInt(glowInput.value);
+                if (glow > 0) {
+                    ctx.save();
+                    ctx.globalCompositeOperation = blendModeSelect.value; // 주변에도 빛처럼 합성
+                    ctx.globalAlpha = (parseInt(opacityInput.value) / 100) * 0.5; // 원래 투명도의 절반
+                    ctx.filter = `blur(${glow}px)`; // 강한 블러로 환경광 효과
+                    
+                    ctx.beginPath();
+                    ctx.moveTo(corners[0].x, corners[0].y); ctx.lineTo(corners[1].x, corners[1].y);
+                    ctx.lineTo(corners[3].x, corners[3].y); ctx.lineTo(corners[2].x, corners[2].y);
+                    ctx.closePath();
+                    ctx.clip();
+                    
+                    ctx.drawImage(videoElement, minX - glow, minY - glow, w + glow*2, h + glow*2);
+                    ctx.restore();
+                }
+
+                // 3. 메인 콘텐츠 레이어: 실제 영상 매핑 및 렌더링
+                ctx.save();
+                ctx.globalCompositeOperation = blendModeSelect.value; // Screen 등 빛 합성 모드 적용
+                ctx.globalAlpha = parseInt(opacityInput.value) / 100;
+                ctx.filter = 'none';
+
+                ctx.beginPath();
+                ctx.moveTo(corners[0].x, corners[0].y); ctx.lineTo(corners[1].x, corners[1].y);
+                ctx.lineTo(corners[3].x, corners[3].y); ctx.lineTo(corners[2].x, corners[2].y);
+                ctx.closePath();
+                ctx.clip(); // 매핑 영역 마스크
+
+                ctx.drawImage(videoElement, minX, minY, w, h);
                 ctx.restore();
 
-                // 공정 [3] 마스크 페더(후보정) 일괄 자동 연산
+                // 4. 마스크 후보정: 외곽선 페더링 깎아내기 (자연스러운 경계선)
                 let feather = parseInt(featherInput.value);
                 if (feather > 0) {
                     ctx.save();
-                    ctx.globalCompositeOperation = 'destination-out'; // 영상 경계면 깎아내기 알고리즘
+                    ctx.globalCompositeOperation = 'destination-out'; // 지우개 모드
                     
-                    let minX = Math.min(corners[0].x, corners[2].x);
-                    let maxX = Math.max(corners[1].x, corners[3].x);
-                    
-                    // 왼쪽 경계면 페더링
                     let gradLeft = ctx.createLinearGradient(minX, 0, minX + feather, 0);
-                    gradLeft.addColorStop(0, 'rgba(0,0,0,1)');
-                    gradLeft.addColorStop(1, 'rgba(0,0,0,0)');
-                    ctx.fillStyle = gradLeft;
-                    ctx.fillRect(minX, 0, feather, canvas.height);
+                    gradLeft.addColorStop(0, 'rgba(0,0,0,1)'); gradLeft.addColorStop(1, 'rgba(0,0,0,0)');
+                    ctx.fillStyle = gradLeft; ctx.fillRect(minX, minY, feather, h);
 
-                    // 오른쪽 경계면 페더링
-                    let gradRight = ctx.createLinearGradient(maxX - feather, 0, maxX, 0);
-                    gradRight.addColorStop(0, 'rgba(0,0,0,0)');
-                    gradRight.addColorStop(1, 'rgba(0,0,0,1)');
-                    ctx.fillStyle = gradRight;
-                    ctx.fillRect(maxX - feather, 0, feather, canvas.height);
-                    
+                    let gradRight = ctx.createLinearGradient(minX + w - feather, 0, minX + w, 0);
+                    gradRight.addColorStop(0, 'rgba(0,0,0,0)'); gradRight.addColorStop(1, 'rgba(0,0,0,1)');
+                    ctx.fillStyle = gradRight; ctx.fillRect(minX + w - feather, minY, feather, h);
                     ctx.restore();
                 }
             }
         }
-
-        // 초기 렌더링
         renderLoop();
     </script>
 </body>
