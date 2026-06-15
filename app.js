@@ -11,7 +11,6 @@ const deletePointButton = document.getElementById("deletePointButton");
 const resetButton = document.getElementById("resetButton");
 const zoomSlider = document.getElementById("zoomSlider");
 
-const stageScroll = document.getElementById("stageScroll");
 const stage = document.getElementById("stage");
 const bgImg = document.getElementById("bgImg");
 
@@ -64,7 +63,6 @@ function initialize() {
   zoomSlider.addEventListener("input", handleZoom);
 
   stage.addEventListener("click", handleStageClick);
-  window.addEventListener("resize", handleWindowResize);
 
   refreshFileUI();
   renderPoints();
@@ -194,7 +192,7 @@ function handleZoom() {
 
 function handleStageClick(event) {
   if (editMode !== "add") return;
-  if (event.target.classList.contains("point-handle")) return;
+  if (event.target.classList.contains("pt")) return;
 
   const position = getStagePositionFromEvent(event);
 
@@ -202,10 +200,6 @@ function handleStageClick(event) {
   points = sortPointsClockwise(points);
 
   renderPoints();
-  updateMapping();
-}
-
-function handleWindowResize() {
   updateMapping();
 }
 
@@ -365,7 +359,7 @@ function fitPointsToBackground() {
 }
 
 function renderPoints() {
-  const oldHandles = stage.querySelectorAll(".point-handle");
+  const oldHandles = stage.querySelectorAll(".pt");
   oldHandles.forEach((handle) => handle.remove());
 
   poly.setAttribute(
@@ -375,10 +369,10 @@ function renderPoints() {
 
   points.forEach((point, index) => {
     const handle = document.createElement("button");
-    handle.className = "point-handle";
+    handle.className = "pt";
 
     if (editMode === "delete") {
-      handle.classList.add("delete-mode");
+      handle.classList.add("del");
     }
 
     handle.style.left = `${point.x}px`;
