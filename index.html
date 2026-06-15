@@ -10,11 +10,12 @@
   <main class="app">
     <header>
       <h1>Spatial Facade Mapper</h1>
-      <p>배경 이미지 위에 포인트를 찍고, 파사드 콘텐츠를 공간에 맞춰 왜곡합니다.</p>
+      <p>배경 이미지를 넣고, 스캔 영역을 드래그한 뒤 파사드 콘텐츠를 공간에 맞춰 확인합니다.</p>
     </header>
 
     <section id="dropZone" class="drop">
-      <b>이미지/영상 파일 또는 폴더 드래그</b>
+      <strong>파일 또는 폴더를 화면에 드래그하세요</strong>
+      <span>첫 이미지는 배경으로, 이후 이미지/영상은 파사드 콘텐츠로 자동 적용됩니다.</span>
       <div>
         <label>파일 선택 <input id="fileInput" type="file" multiple accept="image/*,video/*"></label>
         <label>폴더 선택 <input id="folderInput" type="file" webkitdirectory directory multiple></label>
@@ -22,37 +23,58 @@
     </section>
 
     <section class="controls">
-      <label>배경 <select id="bgSelect"><option value="">선택</option></select></label>
-      <label>콘텐츠 <select id="contentSelect"><option value="">선택</option></select></label>
-      <button id="scanButton" disabled>공간 스캔</button>
+      <label>배경 이미지
+        <select id="bgSelect"><option value="">배경 선택</option></select>
+      </label>
+
+      <label>파사드 콘텐츠
+        <select id="contentSelect"><option value="">콘텐츠 선택</option></select>
+      </label>
+
+      <button id="scanAreaButton" disabled>스캔 영역 지정</button>
+      <button id="scanButton" disabled>현재 영역 스캔</button>
       <button id="addPointButton" disabled>포인트 추가</button>
-      <button id="deletePointButton" disabled>포인트 삭제</button>
+      <button id="deletePointButton" disabled>선택 포인트 삭제</button>
       <button id="resetButton" disabled>초기화</button>
-      <label>배경 크기 <input id="zoomSlider" type="range" min="40" max="160" value="100"></label>
+
+      <label class="check">
+        <input id="guideToggle" type="checkbox" checked>
+        가이드 표시
+      </label>
+
+      <label>배경 크기
+        <input id="zoomSlider" type="range" min="35" max="160" value="100">
+      </label>
     </section>
 
     <section class="layout">
       <div id="stageScroll" class="stage-scroll">
         <div id="stage" class="stage">
-          <img id="bgImg" alt="">
+          <img id="bgImg" alt="배경 이미지">
           <div id="mapped" class="mapped empty">
-            <img id="mapImg" alt="">
+            <img id="mapImg" alt="파사드 이미지">
             <video id="mapVideo" muted loop playsinline></video>
           </div>
-          <svg id="svg" class="svg"><polygon id="poly"></polygon></svg>
+          <svg id="overlay" class="overlay">
+            <polygon id="poly"></polygon>
+            <rect id="scanRect"></rect>
+          </svg>
         </div>
       </div>
 
       <aside>
         <h2>파일 목록</h2>
         <div id="fileList" class="file-list"></div>
+
         <h2>상태</h2>
-        <p>배경: <b id="bgInfo">없음</b></p>
-        <p>콘텐츠: <b id="contentInfo">없음</b></p>
-        <p>모드: <b id="modeInfo">대기</b></p>
+        <p><span>배경</span><b id="bgInfo">없음</b></p>
+        <p><span>콘텐츠</span><b id="contentInfo">없음</b></p>
+        <p><span>모드</span><b id="modeInfo">대기</b></p>
       </aside>
     </section>
   </main>
+
+  <canvas id="scanCanvas" hidden></canvas>
   <script src="./app.js"></script>
 </body>
 </html>
