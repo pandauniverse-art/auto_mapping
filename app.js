@@ -7,6 +7,8 @@ const bgSelect = $("bgSelect");
 const contentSelect = $("contentSelect");
 const scanAreaButton = $("scanAreaButton");
 const scanButton = $("scanButton");
+const nextCandidateButton = $("nextCandidateButton");
+const clearScanAreasButton = $("clearScanAreasButton");
 const addPointButton = $("addPointButton");
 const deletePointButton = $("deletePointButton");
 const resetButton = $("resetButton");
@@ -37,7 +39,11 @@ let mode = "move";
 let selectedPoint = -1;
 let dragPoint = -1;
 let scanStart = null;
-let scanBox = null;
+let currentScanBox = null;   // 드래그 중인 박스
+let scanBoxes = [];          // 확정된 스캔 영역들
+let scanCandidates = [];     // AI 후보들
+let candidateIndex = 0;      // 현재 후보 인덱스
+
 
 // 초기 코너 핀
 let points = [
@@ -117,11 +123,27 @@ function bindUiEvents() {
     scanCurrentArea();
   };
 
+  nextCandidateButton.onclick = () => {
+    if (!scanCandidates.length) return;
+    candidateIndex = (candidateIndex + 1) % scanCandidates.length;
+    applyCandidate(candidateIndex);
+  };
+
+  clearScanAreasButton.onclick = () => {
+    scanBoxes = [];
+    currentScanBox = null;
+    scanCandidates = [];
+    candidateIndex = 0;
+    modeInfo.textContent = "스캔 영역 초기화";
+    render();
+  };
+
   addPointButton.onclick = () => {
     mode = mode === "add" ? "move" : "add";
     modeInfo.textContent = mode === "add" ? "포인트 추가" : "이동";
     render();
   };
+
 
   deletePointButton.onclick = () => {
     if (selectedPoint >= 0 && points.length > 4) {
@@ -136,11 +158,15 @@ function bindUiEvents() {
   resetButton.onclick = () => {
     fitDefaultPoints();
     selectedPoint = -1;
-    scanBox = null;
+    currentScanBox = null;
+    scanBoxes = [];
+    scanCandidates = [];
+    candidateIndex = 0;
     modeInfo.textContent = "초기화";
     render();
     updateMappedArea();
   };
+
 
   guideToggle.onchange = () => {
     stage.classList.toggle("hide-guides", !guideToggle.checked);
@@ -157,12 +183,13 @@ function bindUiEvents() {
 function bindStageEvents() {
   stage.addEventListener("pointerdown", (e) => {
     const pos = getStagePos(e);
-    if (mode === "scanArea") {
+     if (mode === "scanArea") {
       scanStart = pos;
-      scanBox = { x: pos.x, y: pos.y, w: 1, h: 1 };
+      currentScanBox = { x: pos.x, y: pos.y, w: 1, h: 1 };
       render();
       return;
     }
+
     if (mode === "add" && e.target === overlay) {
       points.push(pos);
       points = sortClockwise(points);
@@ -173,11 +200,12 @@ function bindStageEvents() {
   });
 
   stage.addEventListener("pointermove", (e) => {
-    if (scanStart) {
+      if (scanStart) {
       const pos = getStagePos(e);
-      scanBox = normalizeBox(scanStart, pos);
+      currentScanBox = normalizeBox(scanStart, pos);
       render();
     }
+
     if (dragPoint >= 0) {
       points[dragPoint] = getStagePos(e);
       selectedPoint = dragPoint;
@@ -187,10 +215,16 @@ function bindStageEvents() {
   });
 
   stage.addEventListener("pointerup", () => {
-    if (scanStart) {
-      modeInfo.textContent = "스캔 영역 지정됨 (AI 스캔 대기)";
+      if (scanStart) {
+      if (currentScanBox && currentScanBox.w > 12 && currentScanBox.h > 12) {
+        scanBoxes.push(currentScanBox);
+      }
+      modeInfo.textContent = `스캔 영역 ${scanBoxes.length}개 지정됨`;
       scanStart = null;
+      currentScanBox = null;
+      render();
     }
+
     dragPoint = -1;
   });
 }
@@ -281,8 +315,17 @@ function setContent(file) {
 }
 
 function enableButtons() {
-  [scanAreaButton, scanButton, addPointButton, deletePointButton, resetButton].forEach((b) => b.disabled = false);
+  [
+    scanAreaButton,
+    scanButton,
+    nextCandidateButton,
+    clearScanAreasButton,
+    addPointButton,
+    deletePointButton,
+    resetButton
+  ].forEach((b) => b.disabled = false);
 }
+
 
 function fitDefaultPoints() {
   const w = bgImg.naturalWidth;
@@ -308,15 +351,28 @@ function render() {
     clipPathData.setAttribute("d", pathString); // 실제 영상을 자르는 마스크
   }
 
-  if (scanBox) {
+  overlay.querySelectorAll(".scan-hint").forEach(el => el.remove());
+
+  scanBoxes.forEach((box) => {
+    const r = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+    r.setAttribute("class", "scan-hint");
+    r.setAttribute("x", box.x);
+    r.setAttribute("y", box.y);
+    r.setAttribute("width", box.w);
+    r.setAttribute("height", box.h);
+    overlay.appendChild(r);
+  });
+
+  if (currentScanBox) {
     scanRect.style.display = "block";
-    scanRect.setAttribute("x", scanBox.x);
-    scanRect.setAttribute("y", scanBox.y);
-    scanRect.setAttribute("width", scanBox.w);
-    scanRect.setAttribute("height", scanBox.h);
+    scanRect.setAttribute("x", currentScanBox.x);
+    scanRect.setAttribute("y", currentScanBox.y);
+    scanRect.setAttribute("width", currentScanBox.w);
+    scanRect.setAttribute("height", currentScanBox.h);
   } else {
     scanRect.style.display = "none";
   }
+
 
   points.forEach((point, index) => {
     const handle = document.createElement("button");
@@ -359,12 +415,8 @@ function updateMappedArea() {
 
   // 원본 영상의 4개 모서리를 Bounding Box의 4개 모서리에 강제 맵핑(Warping)
   const srcPts = [{x:0, y:0}, {x:w, y:0}, {x:w, y:h}, {x:0, y:h}];
-  const dstPts = [
-    {x: box.x, y: box.y},
-    {x: box.x + box.w, y: box.y},
-    {x: box.x + box.w, y: box.y + box.h},
-    {x: box.x, y: box.y + box.h}
-  ];
+  const dstPts = getWarpQuadFromPoints(points);
+
 
   // 투시 행렬 계산
   const H = getHomography(srcPts, dstPts);
@@ -421,36 +473,45 @@ function scanCurrentArea() {
   let hierarchy = new cv.Mat();
   cv.findContours(edges, contours, hierarchy, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
 
-  // 지정한 스캔 박스 주변에서 가장 큰 윤곽선(건물) 찾기
-  let maxArea = 0;
-  let maxContour = null;
-  for (let i = 0; i < contours.size(); ++i) {
-    let cnt = contours.get(i);
-    let area = cv.contourArea(cnt);
-    if (area > maxArea) {
-      maxArea = area;
-      maxContour = cnt;
+    const boxes = scanBoxes.length
+    ? scanBoxes
+    : [{ x: 0, y: 0, w: bgImg.naturalWidth, h: bgImg.naturalHeight }];
+
+  scanCandidates = [];
+  candidateIndex = 0;
+
+  for (const box of boxes) {
+    for (let i = 0; i < contours.size(); ++i) {
+      let cnt = contours.get(i);
+      let area = cv.contourArea(cnt);
+      if (area < 500) continue;
+
+      let approx = new cv.Mat();
+      let epsilon = 0.015 * cv.arcLength(cnt, true);
+      cv.approxPolyDP(cnt, approx, epsilon, true);
+
+      const pts = contourToPoints(approx, 0, 0);
+      approx.delete();
+
+      if (pts.length < 4) continue;
+
+      const score = scoreCandidate(pts, box);
+      if (score > 50) {
+        scanCandidates.push({ points: pts, score });
+      }
     }
   }
 
-  if (maxContour) {
-    // 찾은 외곽선을 부드러운 다각형/곡선 포인트 배열로 변환
-    let approx = new cv.Mat();
-    let epsilon = 0.01 * cv.arcLength(maxContour, true); // epsilon이 낮을수록 곡선(포인트)이 많아짐
-    cv.approxPolyDP(maxContour, approx, epsilon, true);
+  scanCandidates.sort((a, b) => b.score - a.score);
+  scanCandidates = scanCandidates.slice(0, 5);
 
-    points = [];
-    for (let i = 0; i < approx.rows; i++) {
-      points.push({ x: approx.data32S[i * 2], y: approx.data32S[i * 2 + 1] });
-    }
-    
-    // UI 업데이트
-    points = sortClockwise(points);
-    modeInfo.textContent = "AI 윤곽선 스캔 완료";
-    approx.delete();
+  if (scanCandidates.length) {
+    applyCandidate(0);
+    modeInfo.textContent = `AI 윤곽선 스캔 완료 (${scanCandidates.length}개 후보)`;
   } else {
-    modeInfo.textContent = "스캔 실패 - 대상을 찾지 못함";
+    modeInfo.textContent = "스캔 실패 - 후보 없음";
   }
+
 
   // 메모리 해제
   src.delete(); gray.delete(); blurred.delete(); edges.delete(); contours.delete(); hierarchy.delete();
@@ -463,6 +524,45 @@ function scanCurrentArea() {
 // -----------------------------------------------------
 // 이하 유틸 함수들 유지
 // -----------------------------------------------------
+function contourToPoints(cnt, offsetX = 0, offsetY = 0) {
+  const pts = [];
+  for (let i = 0; i < cnt.rows; i++) {
+    pts.push({
+      x: cnt.data32S[i * 2] + offsetX,
+      y: cnt.data32S[i * 2 + 1] + offsetY
+    });
+  }
+  return pts;
+}
+
+function getIntersectionArea(a, b) {
+  const x1 = Math.max(a.x, b.x);
+  const y1 = Math.max(a.y, b.y);
+  const x2 = Math.min(a.x + a.w, b.x + b.w);
+  const y2 = Math.min(a.y + a.h, b.y + b.h);
+  if (x2 <= x1 || y2 <= y1) return 0;
+  return (x2 - x1) * (y2 - y1);
+}
+
+function scoreCandidate(pts, scanBox) {
+  const b = getBounds(pts);
+  const area = b.w * b.h;
+  const overlap = getIntersectionArea(b, scanBox);
+  const overlapRatio = overlap / Math.max(1, scanBox.w * scanBox.h);
+  const fillRatio = area / Math.max(1, scanBox.w * scanBox.h);
+  return overlapRatio * 1000 + fillRatio * 100;
+}
+
+function applyCandidate(index) {
+  if (!scanCandidates.length) return;
+  candidateIndex = index;
+  points = sortClockwise(scanCandidates[index].points);
+  selectedPoint = -1;
+  render();
+  updateMappedArea();
+  modeInfo.textContent = `후보 ${index + 1}/${scanCandidates.length} 적용`;
+}
+
 function handleKeyMove(e) {
   if (selectedPoint < 0) return;
   const step = e.shiftKey ? 10 : 1;
@@ -508,6 +608,46 @@ function getBounds(arr) {
 function sortClockwise(arr) {
   const c = arr.reduce((a, p) => ({ x: a.x + p.x / arr.length, y: a.y + p.y / arr.length }), { x: 0, y: 0 });
   return arr.slice().sort((a, b) => Math.atan2(a.y - c.y, a.x - c.x) - Math.atan2(b.y - c.y, b.x - c.x));
+}
+function orderQuad(pts) {
+  const byY = pts.slice().sort((a, b) => a.y - b.y);
+  const top = byY.slice(0, 2).sort((a, b) => a.x - b.x);
+  const bottom = byY.slice(2, 4).sort((a, b) => a.x - b.x);
+  return [top[0], top[1], bottom[1], bottom[0]]; // UL, UR, LR, LL
+}
+
+function nearestPoint(arr, target, used) {
+  let best = null;
+  let bestIdx = -1;
+  let bestDist = Infinity;
+
+  arr.forEach((p, i) => {
+    if (used.has(i)) return;
+    const d = (p.x - target.x) ** 2 + (p.y - target.y) ** 2;
+    if (d < bestDist) {
+      bestDist = d;
+      best = p;
+      bestIdx = i;
+    }
+  });
+
+  used.add(bestIdx);
+  return best;
+}
+
+function getWarpQuadFromPoints(pts) {
+  if (pts.length === 4) return orderQuad(pts);
+
+  const box = getBounds(pts);
+  const targets = [
+    { x: box.x, y: box.y },
+    { x: box.x + box.w, y: box.y },
+    { x: box.x + box.w, y: box.y + box.h },
+    { x: box.x, y: box.y + box.h }
+  ];
+
+  const used = new Set();
+  return targets.map(t => nearestPoint(pts, t, used));
 }
 
 function clamp(v, min, max) {
