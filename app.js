@@ -442,88 +442,7 @@ function getHomography(src, dst) {
 // -----------------------------------------------------
 // 3. AI 공간 자동 스캔 (OpenCV.js 연동)
 // -----------------------------------------------------
-function scanCurrentArea() {
-  if (!bgImg.src) return;
-  if (typeof cv === 'undefined') {
-    alert("AI (OpenCV) 엔진이 아직 로드되지 않았습니다. 몇 초 뒤 다시 시도해주세요.");
-    return;
-  }
 
-  modeInfo.textContent = "AI 분석 중...";
-  
-  // 캔버스에 이미지 복사
-  const canvas = scanCanvas;
-  const ctx = canvas.getContext("2d", { willReadFrequently: true });
-  canvas.width = bgImg.naturalWidth;
-  canvas.height = bgImg.naturalHeight;
-  ctx.drawImage(bgImg, 0, 0);
-
-  // OpenCV 연산: 그레이스케일 -> 블러 -> 엣지 추출(Canny) -> 윤곽선 찾기
-  let src = cv.imread(canvas);
-  let gray = new cv.Mat();
-  cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY, 0);
-  
-  let blurred = new cv.Mat();
-  cv.GaussianBlur(gray, blurred, new cv.Size(5, 5), 0, 0, cv.BORDER_DEFAULT);
-  
-  let edges = new cv.Mat();
-  cv.Canny(blurred, edges, 50, 150);
-  
-  let contours = new cv.MatVector();
-  let hierarchy = new cv.Mat();
-  cv.findContours(edges, contours, hierarchy, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
-
-    const boxes = scanBoxes.length
-    ? scanBoxes
-    : [{ x: 0, y: 0, w: bgImg.naturalWidth, h: bgImg.naturalHeight }];
-
-  scanCandidates = [];
-  candidateIndex = 0;
-
-  for (const box of boxes) {
-    for (let i = 0; i < contours.size(); ++i) {
-      let cnt = contours.get(i);
-      let area = cv.contourArea(cnt);
-      if (area < 500) continue;
-
-      let approx = new cv.Mat();
-      let epsilon = 0.015 * cv.arcLength(cnt, true);
-      cv.approxPolyDP(cnt, approx, epsilon, true);
-
-      const pts = contourToPoints(approx, 0, 0);
-      approx.delete();
-
-      if (pts.length < 4) continue;
-
-      const score = scoreCandidate(pts, box);
-      if (score > 50) {
-        scanCandidates.push({ points: pts, score });
-      }
-    }
-  }
-
-  scanCandidates.sort((a, b) => b.score - a.score);
-  scanCandidates = scanCandidates.slice(0, 5);
-
-  if (scanCandidates.length) {
-    applyCandidate(0);
-    modeInfo.textContent = `AI 윤곽선 스캔 완료 (${scanCandidates.length}개 후보)`;
-  } else {
-    modeInfo.textContent = "스캔 실패 - 후보 없음";
-  }
-
-
-  // 메모리 해제
-  src.delete(); gray.delete(); blurred.delete(); edges.delete(); contours.delete(); hierarchy.delete();
-  
-  selectedPoint = -1;
-  render();
-  updateMappedArea();
-}
-
-// -----------------------------------------------------
-// 이하 유틸 함수들 유지
-// -----------------------------------------------------
 function contourToPoints(cnt, offsetX = 0, offsetY = 0) {
   const pts = [];
   for (let i = 0; i < cnt.rows; i++) {
@@ -544,13 +463,27 @@ function getIntersectionArea(a, b) {
   return (x2 - x1) * (y2 - y1);
 }
 
-function scoreCandidate(pts, scanBox) {
+function scoreCandidate(pts, box) {
   const b = getBounds(pts);
-  const area = b.w * b.h;
-  const overlap = getIntersectionArea(b, scanBox);
-  const overlapRatio = overlap / Math.max(1, scanBox.w * scanBox.h);
-  const fillRatio = area / Math.max(1, scanBox.w * scanBox.h);
-  return overlapRatio * 1000 + fillRatio * 100;
+  const or = getIntersectionArea(b,box)
+    / Math.max(1, box.w * box.h);
+  const fr = (b.w*b.h)
+    / Math.max(1, box.w * box.h);
+  const sides = [
+    dist(pts[0],pts[1]),
+    dist(pts[1],pts[2]),
+    dist(pts[2],pts[3]),
+    dist(pts[3],pts[0])];
+  const avg = sides.reduce((a,v)=>
+    a+v,0)/4;
+  const vr = sides.reduce((s,v)=>
+    s+Math.abs(v-avg),0)/avg;
+  const shape = Math.max(0,1-vr*.5)*200;
+  return or*1000 + fr*100 + shape;
+}
+function dist(a,b){
+  return Math.sqrt(
+    (a.x-b.x)**2+(a.y-b.y)**2);
 }
 
 function applyCandidate(index) {
