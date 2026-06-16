@@ -1,3 +1,7 @@
+/* ==========================================================
+   Spatial Facade Mapper - Original CSS Structure
+   ========================================================== */
+
 * {
   box-sizing: border-box;
 }
@@ -123,21 +127,62 @@ input[type="range"] {
   width: 150px;
 }
 
-.layout {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 280px;
-  gap: 16px;
-  align-items: start;
+/* ==========================================================
+   Layout (Resizable Integration)
+   ========================================================== */
+
+.main-layout {
+  display: flex;
+  flex-direction: row;
+  height: calc(100vh - 180px);
+  overflow: hidden;
+  gap: 0;
 }
 
 .stage-scroll {
-  height: calc(100vh - 245px);
-  min-height: 520px;
+  flex: 1 1 auto;
+  min-width: 260px;
+  height: 100%;
   border: 1px solid #27272a;
   border-radius: 8px;
   overflow: auto;
   background: #050608;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  position: relative;
 }
+
+.resizer {
+  width: 10px;
+  flex: 0 0 10px;
+  background: transparent;
+  cursor: col-resize;
+  transition: none;
+}
+
+.resizer:hover {
+  background: #181b22;
+}
+
+.side-panel {
+  width: 420px;
+  min-width: 320px;
+  max-width: 520px;
+  flex-shrink: 0;
+  overflow-y: auto;
+  border: 1px solid #27272a;
+  border-radius: 8px;
+  background: #18181b;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* ==========================================================
+   Mapping & Overlay Core Logic
+   ========================================================== */
 
 .stage {
   position: relative;
@@ -221,7 +266,6 @@ input[type="range"] {
   stroke-dasharray: 6 4;
 }
 
-
 .stage.hide-guides #poly,
 .stage.hide-guides #scanRect,
 .stage.hide-guides .pt {
@@ -254,14 +298,11 @@ input[type="range"] {
   cursor: grabbing;
 }
 
-aside {
-  border: 1px solid #27272a;
-  border-radius: 8px;
-  background: #18181b;
-  padding: 14px;
-}
+/* ==========================================================
+   Side Panel Specifics
+   ========================================================== */
 
-aside p {
+.side-panel p {
   display: flex;
   justify-content: space-between;
   gap: 12px;
@@ -269,11 +310,11 @@ aside p {
   border-bottom: 1px solid #2a2a30;
 }
 
-aside span {
+.side-panel span {
   color: #a1a1aa;
 }
 
-aside b {
+.side-panel b {
   color: #ffffff;
   text-align: right;
 }
@@ -289,16 +330,57 @@ aside b {
   color: #cbd5e1;
 }
 
+.status-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.step-group {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid #2a2a30;
+  border-radius: 8px;
+  background: #14161c;
+}
+
+.step-label {
+  min-width: 72px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #a1a1aa;
+}
+
+/* ==========================================================
+   Responsive
+   ========================================================== */
+
 @media (max-width: 900px) {
-  .layout {
-    grid-template-columns: 1fr;
+  .main-layout {
+    flex-direction: column;
+    height: auto;
+  }
+
+  .resizer {
+    display: none;
+  }
+
+  .stage-scroll {
+    min-width: 0;
+    min-height: 55vh;
+    height: 55vh;
+  }
+
+  .side-panel {
+    width: 100%;
+    min-width: 0;
+    max-width: none;
   }
 
   .app {
     padding: 14px;
-  }
-
-  .stage-scroll {
-    height: 60vh;
   }
 }
