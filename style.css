@@ -214,6 +214,14 @@ input[type="range"] {
   stroke-dasharray: 8 6;
 }
 
+.scan-hint {
+  fill: rgba(34, 211, 238, 0.08);
+  stroke: rgba(34, 211, 238, 0.85);
+  stroke-width: 2;
+  stroke-dasharray: 6 4;
+}
+
+
 .stage.hide-guides #poly,
 .stage.hide-guides #scanRect,
 .stage.hide-guides .pt {
