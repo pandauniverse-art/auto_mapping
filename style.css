@@ -1,4 +1,373 @@
-/* ==========================================================
+/* =========================================================
+   Spatial Facade Mapper — Full Viewport Layout
+   ========================================================= */
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  background: #101217;
+  color: #f4f4f5;
+  font-family: Arial, "Noto Sans KR", sans-serif;
+  overflow: hidden;
+}
+
+/* ── 전체 앱: 100vh 3단 수직 레이아웃 ── */
+.app {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  overflow: hidden;
+}
+
+/* ① 툴바 (40px 고정) */
+.toolbar {
+  flex-shrink: 0;
+  height: 40px;
+  background: #18181b;
+  border-bottom: 1px solid #27272a;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px;
+}
+
+.toolbar-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: #e2e8f0;
+  margin-right: 8px;
+  white-space: nowrap;
+}
+
+.toolbar-btn {
+  height: 28px;
+  padding: 0 10px;
+  border: 1px solid #3f3f46;
+  border-radius: 5px;
+  background: #222a35;
+  color: #fff;
+  display: inline-flex;
+  align-items: center;
+  cursor: pointer;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.toolbar-btn input { display: none; }
+.toolbar-drop { flex: 1; }
+
+/* ② 메인 영역 (flex:1 — 남은 높이 전부) */
+.main-layout {
+  flex: 1 1 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: row;
+  overflow: hidden;
+}
+
+/* 스테이지 스크롤 영역 */
+.stage-scroll {
+  flex: 1 1 0;
+  min-width: 0;
+  overflow: auto;
+  background: #050608;
+  position: relative;
+  padding: 20px;
+}
+
+/* 리사이저 */
+.resizer {
+  width: 4px;
+  flex-shrink: 0;
+  background: #27272a;
+  cursor: col-resize;
+}
+.resizer:hover { background: #3f3f46; }
+
+/* 우측 패널 */
+.side-panel {
+  width: 320px;
+  min-width: 240px;
+  max-width: 420px;
+  flex-shrink: 0;
+  overflow-y: auto;
+  background: #18181b;
+  border-left: 1px solid #27272a;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+/* ③ 타임라인 패널 (130px 고정) */
+.timeline-panel {
+  flex-shrink: 0;
+  height: 130px;
+  background: #0f1117;
+  border-top: 1px solid #27272a;
+  padding: 8px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* =========================================================
+   스테이지 내부
+   ========================================================= */
+.stage {
+  position: relative;
+  display: inline-block;
+  transform-origin: 0 0;
+  background: #050608;
+}
+
+#bgImg {
+  display: block;
+  max-width: none !important;
+  max-height: none !important;
+  width: auto !important;
+  height: auto !important;
+  user-select: none;
+  pointer-events: none;
+  z-index: 1;
+}
+
+#bgImg:not([src]), #mapImg:not([src]), #mapVideo:not([src]) { display: none !important; }
+#scanCanvas { display: none !important; }
+
+.mapped {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  mix-blend-mode: screen;
+  opacity: 0.92;
+  clip-path: url(#maskClip);
+  transform-origin: 0 0;
+  z-index: 2;
+}
+.mapped.empty { display: none !important; }
+.mapped img, .mapped video { display: none; transform-origin: 0 0; }
+
+.overlay {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  pointer-events: auto;
+  z-index: 3;
+}
+
+#poly {
+  fill: rgba(34,211,238,0.12);
+  stroke: rgba(34,211,238,0.95);
+  stroke-width: 3;
+  fill-rule: evenodd;
+  vector-effect: non-scaling-stroke;
+}
+
+#scanRect {
+  display: none;
+  fill: rgba(255,255,255,0.08);
+  stroke: rgba(255,255,255,0.95);
+  stroke-width: 2;
+  stroke-dasharray: 8 6;
+}
+
+.scan-hint {
+  fill: rgba(34,211,238,0.08);
+  stroke: rgba(34,211,238,0.85);
+  stroke-width: 2;
+  stroke-dasharray: 6 4;
+}
+
+.stage.hide-guides #poly,
+.stage.hide-guides #scanRect,
+.stage.hide-guides .pt { display: none; }
+
+.pt {
+  position: absolute;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 3px solid #fff;
+  border-radius: 50%;
+  background: #06b6d4;
+  transform: translate(-50%, -50%);
+  z-index: 4;
+  cursor: grab;
+  box-shadow: 0 0 0 2px rgba(0,0,0,0.45);
+}
+.pt.selected { background: #facc15; }
+.pt:active { cursor: grabbing; }
+
+/* =========================================================
+   우측 패널 내부 컴포넌트
+   ========================================================= */
+.panel-row {
+  display: flex;
+  gap: 6px;
+}
+
+.panel-label {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: 11px;
+  color: #a1a1aa;
+}
+
+select {
+  height: 30px;
+  background: #18181b;
+  color: #fff;
+  border: 1px solid #3f3f46;
+  border-radius: 5px;
+  padding: 0 6px;
+  font-size: 12px;
+  width: 100%;
+}
+
+.layer-tabs {
+  display: flex;
+  gap: 4px;
+}
+
+.layer-btn {
+  flex: 1;
+  height: 28px;
+  padding: 0;
+  border: none;
+  border-radius: 4px;
+  background: #1e293b;
+  color: #fff;
+  cursor: pointer;
+  font-size: 12px;
+}
+.layer-btn.active,
+.layer-btn:first-child { background: #3b82f6; }
+
+.step-group {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 7px;
+  border: 1px solid #2a2a30;
+  border-radius: 5px;
+  background: #14161c;
+}
+
+.step-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: #a1a1aa;
+  min-width: 46px;
+}
+
+button {
+  height: 26px;
+  padding: 0 8px;
+  border: 1px solid #3f3f46;
+  border-radius: 4px;
+  background: #222a35;
+  color: #fff;
+  cursor: pointer;
+  font-size: 12px;
+  white-space: nowrap;
+}
+button:disabled { opacity: 0.4; cursor: not-allowed; }
+
+.radio-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 12px;
+  color: #cbd5e1;
+  cursor: pointer;
+}
+
+.slider-label {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  color: #a1a1aa;
+  width: 100%;
+}
+
+input[type="range"] { flex: 1; min-width: 60px; height: 14px; }
+
+.status-mini {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 11px;
+  color: #71717a;
+  padding: 3px 0;
+}
+
+.file-list {
+  flex: 1;
+  overflow-y: auto;
+  border: 1px solid #2a2a30;
+  border-radius: 4px;
+  padding: 5px;
+  font-size: 11px;
+  color: #cbd5e1;
+  line-height: 1.6;
+  min-height: 30px;
+}
+
+/* =========================================================
+   타임라인 패널 내부
+   ========================================================= */
+.tl-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.tl-time {
+  font-family: monospace;
+  font-size: 14px;
+  color: #22d3ee;
+  min-width: 68px;
+}
+
+.tl-seek {
+  flex: 1;
+}
+
+.tl-offsets {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+}
+
+.tl-ch {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 11px;
+  color: #a1a1aa;
+}
+
+.tl-ch input[type="range"] { width: 100%; }
+
+.tl-val {
+  font-size: 10px;
+  color: #22d3ee;
+}
+
+/* =========================================================
+   반응형
+   ========================================================= */
+@media (max-width: 800px) {
+  .main-layout { flex-direction: column; }
+  .side-panel { width: 100%; max-width: none; height: 240px; border-left: none; border-top: 1px solid #27272a; }
+  .tl-offsets { grid-template-columns: repeat(2, 1fr); }
+}/* ==========================================================
    Spatial Facade Mapper - Corrected CSS (Layout Positioning Fix)
    ========================================================== */
 
