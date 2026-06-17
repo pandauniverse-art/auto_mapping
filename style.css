@@ -1,5 +1,5 @@
 /* ==========================================================
-   Spatial Facade Mapper - Original CSS Structure
+   Spatial Facade Mapper - Corrected CSS (Layout Positioning Fix)
    ========================================================== */
 
 * {
@@ -128,7 +128,7 @@ input[type="range"] {
 }
 
 /* ==========================================================
-   Layout (Resizable Integration)
+   Layout (Stable Resolution Update)
    ========================================================== */
 
 .main-layout {
@@ -147,10 +147,14 @@ input[type="range"] {
   border-radius: 8px;
   overflow: auto;
   background: #050608;
-  display: flex;
-  justify-content: center;
-  align-items: center;
   position: relative;
+  
+  /* 🌟 [수정] 무대 중심 정렬(center) 대신 좌상단 분리 정렬을 사용하여 */
+  /* Scale 변환 시 정렬 기준점이 흔들리며 마우스 좌표가 튀는 마스킹 결함 완벽 방지 */
+  display: flex;
+  justify-content: flex-start;
+  align-items: flex-start;
+  padding: 40px; 
 }
 
 .resizer {
@@ -184,20 +188,30 @@ input[type="range"] {
    Mapping & Overlay Core Logic
    ========================================================== */
 
+/* 🟢 [새로 추가] 눈에 안 보이는 거대 캔버스가 배경 밀어내는 현상 방지 */
+#scanCanvas {
+  display: none !important;
+}
+
 .stage {
   position: relative;
-  display: inline-block;
+  display: block;      
   transform-origin: 0 0;
   background: #050608;
+  width: max-content;   
 }
 
 #bgImg {
+  position: absolute;   /* 🟢 [추가] 좌상단(0,0)에 절대 좌표로 고정 */
+  left: 0;              /* 🟢 [추가] */
+  top: 0;               /* 🟢 [추가] */
   display: block;
-  max-width: none;
-  width: auto;
-  height: auto;
+  width: 100%;          
+  height: 100%;         
+  object-fit: fill;     /* 🟢 [변경] contain에서 fill로 변경 (스테이지 크기에 꽉 채움) */
   user-select: none;
   pointer-events: none;
+  z-index: 1;           /* 🟢 [추가] 가장 아래 레이어로 설정 */
 }
 
 #bgImg:not([src]),
@@ -215,10 +229,9 @@ input[type="range"] {
   pointer-events: none;
   mix-blend-mode: screen;
   opacity: 0.92;
-  /* 곡선 마스크 적용 */
   clip-path: url(#maskClip);
-  /* 왜곡(Warping)을 위한 기준점 */
   transform-origin: 0 0;
+  z-index: 2;           /* 🟢 [추가] 배경 이미지(1) 바로 위에 얹히도록 설정 */
 }
 
 .mapped.empty {
@@ -227,9 +240,7 @@ input[type="range"] {
 
 .mapped img,
 .mapped video {
-  width: 100%;
-  height: 100%;
-  /* object-fit 제거하여 왜곡이 가능하게 함 */
+  /* 🌟 [수정] JS의 matrix3d 픽셀 크기와 CSS 강제 비율이 충돌하지 않도록 명시적 크기 초기화 선언 */
   display: none;
   transform-origin: 0 0;
 }
@@ -241,13 +252,13 @@ input[type="range"] {
   height: 100%;
   overflow: visible;
   pointer-events: auto;
+  z-index: 3;           /* 🟢 [추가] 맵핑된 비디오 소스(2)보다 위로 올림 */
 }
 
 #poly {
   fill: rgba(34, 211, 238, 0.12);
   stroke: rgba(34, 211, 238, 0.95);
   stroke-width: 3;
-  /* 곡선 패스의 내부 영역을 정확히 계산 */
   fill-rule: evenodd;
 }
 
@@ -281,7 +292,7 @@ input[type="range"] {
   border-radius: 50%;
   background: #06b6d4;
   transform: translate(-50%, -50%);
-  z-index: 20;
+  z-index: 4;           /* 🟢 [변경] 명확하게 오버레이(3) 바로 위로 레이어 순서 정리 */
   cursor: grab;
   box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.45);
 }
