@@ -47,8 +47,12 @@ let scanBoxes = [];
 let scanCandidates = [];
 let candidateIndex = 0;
 
-// 🟢 [2D 전환] 순수 2D 눈속임 워프 엔진용 전역 변수
+// [2D 전환] 순수 2D 눈속임 워프 엔진용 전역 변수
 let canvas2d, ctx2d, currentFacadeSource;
+
+// 📌 WebGL GPU 가속용 변수 추가
+let scene, camera, renderer;
+let layerMeshes = [];
 
 // ✅ 4채널 이머시브 독립 미디어 레이어 구조 정의
 let mappingLayers = [
@@ -506,10 +510,18 @@ function render() {
 }
 
 function updateMappedArea() {
-  if (!bgImg.src || !ctx2d || !canvas2d) return;
+  if (!bgImg.src || !scene) return;
 
-  // 1. 도화지 리셋 (멀티패스 렌더링 시작 전 단 한 번만 수행)
-  ctx2d.clearRect(0, 0, canvas2d.width, canvas2d.height);
+  // 배경 이미지 스케일에 맞춰 WebGL 도화지 크기 실시간 동기화
+  if (renderer) {
+    const w = bgImg.naturalWidth || 800;
+    const h = bgImg.naturalHeight || 600;
+    if (renderer.domElement.width !== w || renderer.domElement.height !== h) {
+      renderer.setSize(w, h);
+      camera.right = w; camera.bottom = h;
+      camera.updateProjectionMatrix();
+    }
+  }
 
   if (mappingLayers[activeLayerIndex]) {
     mappingLayers[activeLayerIndex].warpPoints = warpPoints;
@@ -517,41 +529,25 @@ function updateMappedArea() {
     mappingLayers[activeLayerIndex].warpOrigPoints = warpOrigPoints;
   }
 
-  // 2. 4채널 레이어 배열을 순회하며 다중 컴포지션 연산 실행
-  mappingLayers.forEach((layer) => {
-    const target = layer.source;
-    if (!target) return;
-    if (target.tagName === "VIDEO" && target.readyState < 2) return;
+  // 4개 레이어를 순회하며 정점 버퍼 위치만 초고속 갱신
+  mappingLayers.forEach((layer, idx) => {
+    const mesh = layerMeshes[idx];
+    if (!mesh || !layer.source) return;
+    if (layer.source.tagName === "VIDEO" && layer.source.readyState < 2) return;
 
-    const w = target.videoWidth || target.naturalWidth || 800;
-    const h = target.videoHeight || target.naturalHeight || 600;
-
-    ctx2d.save();
-
-    // ✅ 독립 마스크 오려내기 기능 원상 복구 및 가동
-    if (layer.maskPoints && layer.maskPoints.length > 2) {
-      ctx2d.beginPath();
-      ctx2d.moveTo(layer.maskPoints[0].x, layer.maskPoints[0].y);
-      for (let i = 1; i < layer.maskPoints.length; i++) {
-        ctx2d.lineTo(layer.maskPoints[i].x, layer.maskPoints[i].y);
-      }
-      ctx2d.closePath();
-      ctx2d.clip();
-    }
-
-    ctx2d.globalAlpha = opacitySlider.value / 100;
-    ctx2d.filter = `brightness(${brightnessSlider.value / 100})`;
+    mesh.material.opacity = opacitySlider.value / 100;
 
     const COLS = 32;
     const ROWS = 32;
-    const grid = [];
 
     const ordered = orderQuad(layer.warpPoints.slice(0, 4));
     const tl = ordered[0]; const tr = ordered[1];
     const br = ordered[2]; const bl = ordered[3];
 
+    const posAttr = mesh.geometry.attributes.position;
+    let vIdx = 0;
+
     for (let r = 0; r <= ROWS; r++) {
-      grid[r] = [];
       const v = r / ROWS;
       for (let c = 0; c <= COLS; c++) {
         const u = c / COLS;
@@ -581,30 +577,17 @@ function updateMappedArea() {
             totalWeight += weight;
           }
           if (totalWeight > 0) {
-            sx += deltaX / totalWeight;
-            sy += deltaY / totalWeight;
+            sx += deltaX / totalWeight; sy += deltaY / totalWeight;
           }
         }
-        grid[r][c] = { x: sx, y: sy };
+
+        // Three.js PlaneGeometry 정점 버퍼에 좌표 직접 주입
+        posAttr.setXY(vIdx, sx, sy);
+        vIdx++;
       }
     }
-
-    for (let r = 0; r < ROWS; r++) {
-      for (let c = 0; c < COLS; c++) {
-        const pTL = grid[r][c];         const pTR = grid[r][c + 1];
-        const pBR = grid[r + 1][c + 1]; const pBL = grid[r + 1][c];
-
-        const u0 = (c / COLS) * w;       const v0 = (r / ROWS) * h;
-        const u1 = ((c + 1) / COLS) * w; const v1 = (r / ROWS) * h;
-        const u2 = ((c + 1) / COLS) * w; const v2 = ((r + 1) / ROWS) * h;
-        const u3 = (c / COLS) * w;       const v3 = ((r + 1) / ROWS) * h;
-
-        drawTriangle(ctx2d, target, pTL.x, pTL.y, pTR.x, pTR.y, pBL.x, pBL.y, u0, v0, u1, v1, u3, v3);
-        drawTriangle(ctx2d, target, pTR.x, pTR.y, pBR.x, pBR.y, pBL.x, pBL.y, u1, v1, u2, v2, u3, v3);
-      }
-    }
-
-    ctx2d.restore();
+    // GPU에 변경된 정점 데이터를 한 번에 전송
+    posAttr.needsUpdate = true;
   });
 }
 
@@ -892,40 +875,74 @@ function initThree() {
   if (!container) return;
   
   container.innerHTML = ""; 
-  const canvas = document.createElement("canvas");
-  canvas.id = "facadeCanvas";
-  canvas.style.position = "absolute";
-  canvas.style.top = "0"; canvas.style.left = "0";
-  canvas.style.width = "100%"; canvas.style.height = "100%";
   
-  canvas.style.zIndex = "999"; 
+  // 1. GPU WebGL 렌더러 생성 및 설정
+  renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
+  renderer.setSize(container.clientWidth || 800, container.clientHeight || 600);
+  renderer.domElement.style.position = "absolute";
+  renderer.domElement.style.top = "0"; renderer.domElement.style.left = "0";
+  renderer.domElement.style.zIndex = "999";
+  renderer.domElement.style.pointerEvents = "none";
+  container.appendChild(renderer.domElement);
+  
   container.style.position = "absolute";
   container.style.zIndex = "999";
-  
-  canvas.style.pointerEvents = "none"; 
   container.style.pointerEvents = "none";
-  container.appendChild(canvas);
   
-  canvas2d = canvas;
-  ctx2d = canvas.getContext("2d");
+  scene = new THREE.Scene();
+  
+  // 2. 화면 좌표와 1:1 대응하는 카메라 세팅
+  camera = new THREE.OrthographicCamera(0, container.clientWidth || 800, 0, container.clientHeight || 600, -100, 100);
+  
+  // 3. 4개 채널 독립 WebGL 매쉬(32x32 격자) 사전 생성
+  mappingLayers.forEach(() => {
+    const geometry = new THREE.PlaneGeometry(1, 1, 32, 32);
+    const material = new THREE.MeshBasicMaterial({
+      transparent: true,
+      opacity: 0,
+      side: THREE.DoubleSide
+    });
+    const mesh = new THREE.Mesh(geometry, material);
+    scene.add(mesh);
+    layerMeshes.push(mesh);
+  });
 
   stage.insertBefore(container, overlay);
 
-  let lastTime = 0;
-  function animate(time) {
+  // 4. GPU 최적화 프레임 루프 가동 (60fps)
+  function animate() {
     requestAnimationFrame(animate);
-    if (time - lastTime > 33.3) {
-      updateMappedArea();
-      lastTime = time;
+    updateMappedArea();
+    if (renderer && scene && camera) {
+      renderer.render(scene, camera);
     }
   }
   requestAnimationFrame(animate);
 
-  console.log("2D 눈속임 매쉬 워프 엔진 설치 완료 (30fps 고정)");
+  console.log("🚀 GPU 가속 WebGL 매핑 엔진 설치 완료 (60fps 고정)");
 }
 
 function initOrUpdateFacadeMesh(targetElement, isVideo) {
-  currentFacadeSource = targetElement;
-  console.log(`[2D 워프 엔진] 콘텐츠 소스 탑재 완료 (비디오여부: ${isVideo})`);
-  updateMappedArea();
+  const mesh = layerMeshes[activeLayerIndex];
+  if (!mesh) return;
+
+  // 비디오가 바뀔 때 기존 GPU 그래픽 메모리 해제 (누수 방지)
+  if (mesh.material.map) mesh.material.map.dispose();
+
+  // 비디오 소스를 GPU 가속 텍스처로 변환
+  let texture;
+  if (isVideo) {
+    texture = new THREE.VideoTexture(targetElement);
+    texture.minFilter = THREE.LinearFilter;
+    texture.magFilter = THREE.LinearFilter;
+  } else {
+    texture = new THREE.Texture(targetElement);
+    texture.needsUpdate = true;
+  }
+
+  mesh.material.map = texture;
+  mesh.material.opacity = opacitySlider.value / 100;
+  mesh.material.needsUpdate = true;
+  
+  console.log(`[GPU 텍스처 변환] ${mappingLayers[activeLayerIndex].id} 비디오 탑재 완료`);
 }
