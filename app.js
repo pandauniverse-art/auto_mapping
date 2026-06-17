@@ -50,12 +50,19 @@ let candidateIndex = 0;
 // 🟢 [2D 전환] 순수 2D 눈속임 워프 엔진용 전역 변수
 let canvas2d, ctx2d, currentFacadeSource;
 
-// 마스크 전용 데이터와 워프 전용 데이터 격리
+// ✅ 4채널 이머시브 독립 미디어 레이어 구조 정의
+let mappingLayers = [
+  { id: "Wall A", source: null, warpPoints: [], maskPoints: [], warpOrigPoints: [] },
+  { id: "Wall B", source: null, warpPoints: [], maskPoints: [], warpOrigPoints: [] },
+  { id: "Wall C", source: null, warpPoints: [], maskPoints: [], warpOrigPoints: [] },
+  { id: "Wall D", source: null, warpPoints: [], maskPoints: [], warpOrigPoints: [] }
+];
+let activeLayerIndex = 0;
+
+// 마스크 전용 데이터와 워프 전용 데이터 격리 연동 핸들러 변수
 let maskPoints = [];
 let warpPoints = [];
-let warpOrigPoints = []; // 5번째 이상 핀들의 최초 드롭 위치 기억용
-
-// 현재 활성화된 모드의 배열을 가리키는 포인터 변수
+let warpOrigPoints = [];
 let points = warpPoints;
 
 window.addEventListener('DOMContentLoaded', () => {
@@ -63,9 +70,7 @@ window.addEventListener('DOMContentLoaded', () => {
 });
 
 function init() {
-  // mapped.classList.add("empty"); // ✅ 주석 처리하세요.
   fitDefaultPoints();
-  // ...
   bindFileEvents();
   bindUiEvents();
   bindStageEvents();
@@ -190,12 +195,9 @@ function bindUiEvents() {
   // 🌟 실시간 색감/블렌딩 스타일 연동
   const updateMediaStyle = () => {
     const target = mapVideo.style.display === "block" ? mapVideo : mapImg;
-    
-    // 🟢 [최적화] 브라우저가 비디오 디코딩을 멈추지 않도록 무대 자체는 살려두고 필터로 제어합니다.
     target.style.opacity = "0.001"; 
     target.style.mixBlendMode = blendModeSelect.value;
     
-    // 2D 캔버스 도화지에 피디의 톤세팅 직결 전송
     if (canvas2d) {
       canvas2d.style.mixBlendMode = blendModeSelect.value;
     }
@@ -254,7 +256,6 @@ function bindStageEvents() {
       points[dragPoint] = currentPos;
       selectedPoint = dragPoint;
 
-      // 드래그 중에는 가이드 라인만 실시간 드로잉 갱신
       const pathString = "M " + points.map(p => `${p.x},${p.y}`).join(" L ") + " Z";
       poly.setAttribute("d", pathString);
 
@@ -330,10 +331,9 @@ function setBackground(file) {
   if (bgUrl) URL.revokeObjectURL(bgUrl);
   bgUrl = URL.createObjectURL(file);
   
- bgImg.onload = () => {
-  // ✅ 원래대로 배경 이미지(bgImg)의 크기를 가져오도록 복구합니다.
-  const w = bgImg.naturalWidth; 
-  const h = bgImg.naturalHeight;
+  bgImg.onload = () => {
+    const w = bgImg.naturalWidth; 
+    const h = bgImg.naturalHeight;
 
     stage.style.width = `${w}px`;
     stage.style.height = `${h}px`;
@@ -360,7 +360,6 @@ function setBackground(file) {
       render();
       updateMappedArea();
 
-      // [2D 전환] 배경 이미지 크기에 맞춰 2D 도화지 해상도 동기화
       const webglBox = $("webgl-container");
       if (webglBox) {
         webglBox.style.width = `${w}px`;
@@ -371,50 +370,37 @@ function setBackground(file) {
         canvas2d.height = h;
       }
     });
-  }; // <- bgImg.onload 닫는 괄호
+  };
   
-  bgImg.src = bgUrl; // <- 이게 함수 안에 있어야 합니다!
-} // <- setBackground 함수를 닫는 괄호
+  bgImg.src = bgUrl;
+}
 
 function setContent(file) {
-  if (contentUrl) URL.revokeObjectURL(contentUrl);
-  contentUrl = URL.createObjectURL(file);
-  mapped.classList.remove("empty");
-  mapImg.style.display = "none";
-  mapVideo.style.display = "none";
-  mapImg.removeAttribute("src");
-  mapVideo.pause();
-  mapVideo.removeAttribute("src");
-  mapVideo.load();
+  let url = URL.createObjectURL(file);
+  let mediaEl;
 
   if (file.type.startsWith("video/")) {
-    mapVideo.src = contentUrl;
-    // ✅ 화면에서만 숨기고 디코딩 유지 (position absolute로 레이아웃 영향 제거)
-    mapVideo.style.visibility = "hidden"; 
-    mapVideo.style.position = "absolute";
-    
-    mapVideo.onloadedmetadata = () => {
-      mapVideo.style.display = "block";
-      initOrUpdateFacadeMesh(mapVideo, true);
-      updateMappedArea();
-      if (window.updateMediaStyle) window.updateMediaStyle();
+    mediaEl = document.createElement("video");
+    mediaEl.src = url;
+    mediaEl.muted = true;
+    mediaEl.loop = true;
+    mediaEl.playsInline = true;
+    mediaEl.style.visibility = "hidden";
+    mediaEl.style.position = "absolute";
+    mediaEl.onloadedmetadata = () => {
+      initOrUpdateFacadeMesh(mediaEl, true);
     };
-    
-    mapVideo.play().catch(() => {});
-    modeInfo.textContent = "영상 적용됨";
+    mediaEl.play().catch(() => {});
   } else {
-    mapImg.src = contentUrl;
-    
-    mapImg.onload = () => {
-      mapImg.style.display = "block";
-      initOrUpdateFacadeMesh(mapImg, false);
-      updateMappedArea();
-      if (window.updateMediaStyle) window.updateMediaStyle();
+    mediaEl = document.createElement("img");
+    mediaEl.src = url;
+    mediaEl.onload = () => {
+      initOrUpdateFacadeMesh(mediaEl, false);
     };
-    
-    modeInfo.textContent = "이미지 적용됨";
   }
-  contentInfo.textContent = file.name;
+  
+  mappingLayers[activeLayerIndex].source = mediaEl;
+  contentInfo.textContent = `${mappingLayers[activeLayerIndex].id}: ${file.name}`;
 }
 
 function enableButtons() {
@@ -433,19 +419,49 @@ function fitDefaultPoints() {
   const w = bgImg.naturalWidth || 800;
   const h = bgImg.naturalHeight || 600;
   
-  maskPoints = [
-    { x: w * 0.2, y: h * 0.22 }, { x: w * 0.8, y: h * 0.22 },
-    { x: w * 0.8, y: h * 0.78 }, { x: w * 0.2, y: h * 0.78 },
-  ];
-  warpPoints = [
-    { x: w * 0.2, y: h * 0.22 }, { x: w * 0.8, y: h * 0.22 },
-    { x: w * 0.8, y: h * 0.78 }, { x: w * 0.2, y: h * 0.78 },
-  ];
-  warpOrigPoints = []; 
+  // ✅ 4개 독립 채널 메모리 공간 초기화 및 독립 마스크 범위 부여
+  mappingLayers.forEach((layer) => {
+    layer.maskPoints = [
+      { x: 0, y: 0 }, { x: w, y: 0 },
+      { x: w, y: h }, { x: 0, y: h }
+    ];
+    layer.warpPoints = [
+      { x: w * 0.2, y: h * 0.22 }, { x: w * 0.8, y: h * 0.22 },
+      { x: w * 0.8, y: h * 0.78 }, { x: w * 0.2, y: h * 0.78 }
+    ];
+    layer.warpOrigPoints = [];
+  });
 
+  syncActiveLayerData();
+}
+
+function syncActiveLayerData() {
+  const layer = mappingLayers[activeLayerIndex];
+  warpPoints = layer.warpPoints;
+  maskPoints = layer.maskPoints;
+  warpOrigPoints = layer.warpOrigPoints;
+  
   const modeMask = document.getElementById("modeMask");
   points = (modeMask && modeMask.checked) ? maskPoints : warpPoints;
 }
+
+// ✅ 글로벌 스위칭 인터페이스 제어 장치 추가
+window.switchLayer = function(index) {
+  mappingLayers[activeLayerIndex].warpPoints = warpPoints;
+  mappingLayers[activeLayerIndex].maskPoints = maskPoints;
+  mappingLayers[activeLayerIndex].warpOrigPoints = warpOrigPoints;
+  
+  activeLayerIndex = index;
+  syncActiveLayerData();
+  
+  document.querySelectorAll('.layer-btn').forEach((btn, i) => {
+    btn.style.background = (i === index) ? "#3b82f6" : "";
+  });
+  
+  selectedPoint = -1;
+  render();
+  updateMappedArea();
+};
 
 function render() {
   stage.querySelectorAll(".pt").forEach((el) => el.remove());
@@ -490,114 +506,112 @@ function render() {
 }
 
 function updateMappedArea() {
-  if (!bgImg.src) return;
+  if (!bgImg.src || !ctx2d || !canvas2d) return;
 
-  // 🟢 [버그 해결] 영상을 숨기되, display: none이 아닌 visibility: hidden을 사용하여 비디오 디코딩을 유지합니다.
-  
-  // 🟢 소스 비디오가 캔버스에 그릴 준비(첫 프레임 로드)가 되었는지 체크
-  if (warpPoints.length < 4 || !currentFacadeSource || !ctx2d) return;
-if (currentFacadeSource.tagName === "VIDEO" && currentFacadeSource.readyState < 2) return;
-  const target = currentFacadeSource;
-  
-  // ✅ 1. 영상 콘텐츠의 실제 원본 해상도를 이곳에서 적용합니다.
-  const w = target.videoWidth || target.naturalWidth || 800;
-  const h = target.videoHeight || target.naturalHeight || 600;
-
+  // 1. 도화지 리셋 (멀티패스 렌더링 시작 전 단 한 번만 수행)
   ctx2d.clearRect(0, 0, canvas2d.width, canvas2d.height);
-  ctx2d.save();
-  
-  // 🟢 [마스크 클리핑 이식] 2D 캔버스 내부 컨텍스트 패스로 오려내어 무너짐 현상 완벽 조율
-  // ✅ [교체] 영상을 가두고 자르는 원인이므로 마스크 클리핑 구간을 통째로 주석 처리합니다.
-  /*
-  if (maskPoints.length > 2) {
-    ctx2d.beginPath();
-    ctx2d.moveTo(maskPoints[0].x, maskPoints[0].y);
-    for (let i = 1; i < maskPoints.length; i++) {
-      ctx2d.lineTo(maskPoints[i].x, maskPoints[i].y);
-    }
-    ctx2d.closePath();
-    ctx2d.clip(); 
+
+  if (mappingLayers[activeLayerIndex]) {
+    mappingLayers[activeLayerIndex].warpPoints = warpPoints;
+    mappingLayers[activeLayerIndex].maskPoints = maskPoints;
+    mappingLayers[activeLayerIndex].warpOrigPoints = warpOrigPoints;
   }
-  */
 
-  ctx2d.globalAlpha = opacitySlider.value / 100;
-  ctx2d.filter = `brightness(${brightnessSlider.value / 100})`;
+  // 2. 4채널 레이어 배열을 순회하며 다중 컴포지션 연산 실행
+  mappingLayers.forEach((layer) => {
+    const target = layer.source;
+    if (!target) return;
+    if (target.tagName === "VIDEO" && target.readyState < 2) return;
 
-  const COLS = 32;
-  const ROWS = 32;
-  const grid = [];
+    const w = target.videoWidth || target.naturalWidth || 800;
+    const h = target.videoHeight || target.naturalHeight || 600;
 
-  // ✅ [교체] 핀을 아무리 벌려도 격자가 깨지지 않고 끝까지 늘어나도록 꼭짓점 순서를 강제 정렬합니다.
-  const ordered = orderQuad(warpPoints.slice(0, 4));
-  const tl = ordered[0]; const tr = ordered[1];
-  const br = ordered[2]; const bl = ordered[3];
+    ctx2d.save();
 
-  for (let r = 0; r <= ROWS; r++) {
-    grid[r] = [];
-    const v = r / ROWS;
-    for (let c = 0; c <= COLS; c++) {
-      const u = c / COLS;
-
-      const topX = tl.x * (1 - u) + tr.x * u;
-      const topY = tl.y * (1 - u) + tr.y * u;
-      const botX = bl.x * (1 - u) + br.x * u;
-      const botY = bl.y * (1 - u) + br.y * u;
-
-      let sx = topX * (1 - v) + botX * v;
-      let sy = topY * (1 - v) + botY * v;
-
-      if (warpPoints.length > 4) {
-        let totalWeight = 0; let deltaX = 0; let deltaY = 0;
-
-        for (let j = 4; j < warpPoints.length; j++) {
-          const origPin = warpOrigPoints[j];
-          const curPin = warpPoints[j];
-          if (!origPin || !curPin) continue;
-
-          const dx = sx - origPin.x;
-          const dy = sy - origPin.y;
-          const distSq = dx * dx + dy * dy + 0.5;
-
-          const weight = 1.0 / Math.pow(distSq, 1.3);
-
-          deltaX += (curPin.x - origPin.x) * weight;
-          deltaY += (curPin.y - origPin.y) * weight;
-          totalWeight += weight;
-        }
-
-        if (totalWeight > 0) {
-          sx += deltaX / totalWeight;
-          sy += deltaY / totalWeight;
-        }
+    // ✅ 독립 마스크 오려내기 기능 원상 복구 및 가동
+    if (layer.maskPoints && layer.maskPoints.length > 2) {
+      ctx2d.beginPath();
+      ctx2d.moveTo(layer.maskPoints[0].x, layer.maskPoints[0].y);
+      for (let i = 1; i < layer.maskPoints.length; i++) {
+        ctx2d.lineTo(layer.maskPoints[i].x, layer.maskPoints[i].y);
       }
-      grid[r][c] = { x: sx, y: sy };
+      ctx2d.closePath();
+      ctx2d.clip();
     }
-  }
 
-  for (let r = 0; r < ROWS; r++) {
-    for (let c = 0; c < COLS; c++) {
-      const pTL = grid[r][c];     const pTR = grid[r][c + 1];
-      const pBR = grid[r + 1][c + 1]; const pBL = grid[r + 1][c];
+    ctx2d.globalAlpha = opacitySlider.value / 100;
+    ctx2d.filter = `brightness(${brightnessSlider.value / 100})`;
 
-      const u0 = (c / COLS) * w;       const v0 = (r / ROWS) * h;
-      const u1 = ((c + 1) / COLS) * w; const v1 = (r / ROWS) * h;
-      const u2 = ((c + 1) / COLS) * w; const v2 = ((r + 1) / ROWS) * h;
-      const u3 = (c / COLS) * w;       const v3 = ((r + 1) / ROWS) * h;
+    const COLS = 32;
+    const ROWS = 32;
+    const grid = [];
 
-      drawTriangle(ctx2d, target, pTL.x, pTL.y, pTR.x, pTR.y, pBL.x, pBL.y, u0, v0, u1, v1, u3, v3);
-      drawTriangle(ctx2d, target, pTR.x, pTR.y, pBR.x, pBR.y, pBL.x, pBL.y, u1, v1, u2, v2, u3, v3);
+    const ordered = orderQuad(layer.warpPoints.slice(0, 4));
+    const tl = ordered[0]; const tr = ordered[1];
+    const br = ordered[2]; const bl = ordered[3];
+
+    for (let r = 0; r <= ROWS; r++) {
+      grid[r] = [];
+      const v = r / ROWS;
+      for (let c = 0; c <= COLS; c++) {
+        const u = c / COLS;
+
+        const topX = tl.x * (1 - u) + tr.x * u;
+        const topY = tl.y * (1 - u) + tr.y * u;
+        const botX = bl.x * (1 - u) + br.x * u;
+        const botY = bl.y * (1 - u) + br.y * u;
+
+        let sx = topX * (1 - v) + botX * v;
+        let sy = topY * (1 - v) + botY * v;
+
+        if (layer.warpPoints.length > 4) {
+          let totalWeight = 0; let deltaX = 0; let deltaY = 0;
+          for (let j = 4; j < layer.warpPoints.length; j++) {
+            const origPin = layer.warpOrigPoints[j];
+            const curPin = layer.warpPoints[j];
+            if (!origPin || !curPin) continue;
+
+            const dx = sx - origPin.x;
+            const dy = sy - origPin.y;
+            const distSq = dx * dx + dy * dy + 0.5;
+            const weight = 1.0 / Math.pow(distSq, 1.3);
+
+            deltaX += (curPin.x - origPin.x) * weight;
+            deltaY += (curPin.y - origPin.y) * weight;
+            totalWeight += weight;
+          }
+          if (totalWeight > 0) {
+            sx += deltaX / totalWeight;
+            sy += deltaY / totalWeight;
+          }
+        }
+        grid[r][c] = { x: sx, y: sy };
+      }
     }
-  }
 
-  ctx2d.restore();
+    for (let r = 0; r < ROWS; r++) {
+      for (let c = 0; c < COLS; c++) {
+        const pTL = grid[r][c];         const pTR = grid[r][c + 1];
+        const pBR = grid[r + 1][c + 1]; const pBL = grid[r + 1][c];
+
+        const u0 = (c / COLS) * w;       const v0 = (r / ROWS) * h;
+        const u1 = ((c + 1) / COLS) * w; const v1 = (r / ROWS) * h;
+        const u2 = ((c + 1) / COLS) * w; const v2 = ((r + 1) / ROWS) * h;
+        const u3 = (c / COLS) * w;       const v3 = ((r + 1) / ROWS) * h;
+
+        drawTriangle(ctx2d, target, pTL.x, pTL.y, pTR.x, pTR.y, pBL.x, pBL.y, u0, v0, u1, v1, u3, v3);
+        drawTriangle(ctx2d, target, pTR.x, pTR.y, pBR.x, pBR.y, pBL.x, pBL.y, u1, v1, u2, v2, u3, v3);
+      }
+    }
+
+    ctx2d.restore();
+  });
 }
 
 function drawTriangle(ctx, img, x0, y0, x1, y1, x2, y2, u0, v0, u1, v1, u2, v2) {
-  // 1. 삼각형의 중심점 계산
   const cx = (x0 + x1 + x2) / 3;
   const cy = (y0 + y1 + y2) / 3;
   
-  // 2. 이음새 방지를 위해 1.006배 살짝 확장
   const scale = 1.006; 
   const nx0 = cx + (x0 - cx) * scale;
   const ny0 = cy + (y0 - cy) * scale;
@@ -608,12 +622,10 @@ function drawTriangle(ctx, img, x0, y0, x1, y1, x2, y2, u0, v0, u1, v1, u2, v2) 
 
   ctx.save();
   ctx.beginPath();
-  // 3. 확장된 좌표로 클리핑 영역 생성
   ctx.moveTo(nx0, ny0); ctx.lineTo(nx1, ny1); ctx.lineTo(nx2, ny2);
   ctx.closePath();
   ctx.clip();
 
-  // 4. 변환 행렬 계산 (좌표는 원본 x,y 사용)
   const denom = u0 * (v1 - v2) + u1 * (v2 - v0) + u2 * (v0 - v1);
   if (Math.abs(denom) < 0.0001) { ctx.restore(); return; }
 
@@ -621,7 +633,8 @@ function drawTriangle(ctx, img, x0, y0, x1, y1, x2, y2, u0, v0, u1, v1, u2, v2) 
   const b = (y0 * (v1 - v2) + y1 * (v2 - v0) + y2 * (v0 - v1)) / denom;
   const c = (u0 * (x1 - x2) + u1 * (x2 - x0) + u2 * (x0 - x1)) / denom;
   const d = (u0 * (y1 - y2) + u1 * (y2 - y0) + u2 * (y0 - y1)) / denom;
-  // ✅ [교체] 뒤틀려 있던 행렬 부호 공식을 올바른 이동 변환 식으로 바로잡습니다.
+  
+  // ✅ 정석 아핀 텍스처 평행이동 변환 행렬 공식 적용
   const e = (u0 * (v1 * x2 - v2 * x1) + v0 * (u2 * x1 - u1 * x2) + x0 * (u1 * v2 - u2 * v1)) / denom;
   const f = (u0 * (v1 * y2 - v2 * y1) + v0 * (u2 * y1 - u1 * y2) + y0 * (u1 * v2 - u2 * v1)) / denom;
 
@@ -885,15 +898,9 @@ function initThree() {
   canvas.style.top = "0"; canvas.style.left = "0";
   canvas.style.width = "100%"; canvas.style.height = "100%";
   
-  // ✅ 아래 3줄을 추가하여 캔버스를 최상위로 올리고, 투명하지 않게 설정합니다.
   canvas.style.zIndex = "999"; 
   container.style.position = "absolute";
   container.style.zIndex = "999";
-  
-  canvas.style.pointerEvents = "none"; 
-  container.style.pointerEvents = "none";
-  container.appendChild(canvas);
-  // ... (이하 동일)
   
   canvas.style.pointerEvents = "none"; 
   container.style.pointerEvents = "none";
@@ -902,14 +909,11 @@ function initThree() {
   canvas2d = canvas;
   ctx2d = canvas.getContext("2d");
 
-  // 가려져 있던 캔버스를 건물 사진 바로 앞으로 끌어당깁니다.
   stage.insertBefore(container, overlay);
 
   let lastTime = 0;
   function animate(time) {
     requestAnimationFrame(animate);
-    
-    // 🟢 [30fps 고정] 33.3ms(1초/30프레임) 간격마다만 렌더링
     if (time - lastTime > 33.3) {
       updateMappedArea();
       lastTime = time;
@@ -918,11 +922,10 @@ function initThree() {
   requestAnimationFrame(animate);
 
   console.log("2D 눈속임 매쉬 워프 엔진 설치 완료 (30fps 고정)");
-} // 🟢 [추가] initThree 함수를 닫는 중괄호입니다!
+}
 
-// 🟢 [2D 전환 완성] 새로 들어온 이미지/비디오를 2D 캔버스 엔진의 소스로 정밀 동기화하는 단일 장치
 function initOrUpdateFacadeMesh(targetElement, isVideo) {
   currentFacadeSource = targetElement;
   console.log(`[2D 워프 엔진] 콘텐츠 소스 탑재 완료 (비디오여부: ${isVideo})`);
-  updateMappedArea(); // 🟢 소스가 들어오는 즉시 한 번 그려줍니다.
+  updateMappedArea();
 }
