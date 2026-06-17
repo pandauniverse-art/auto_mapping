@@ -265,9 +265,11 @@ function bindStageEvents() {
 
       const visualHandles = stage.querySelectorAll(".pt");
       if (visualHandles[dragPoint]) {
-        visualHandles[dragPoint].style.left = `${currentPos.x}px`;
-        visualHandles[dragPoint].style.top = `${currentPos.y}px`;
-      }
+  visualHandles[dragPoint].style.left = `${currentPos.x}px`;
+  visualHandles[dragPoint].style.top = `${currentPos.y}px`;
+  // ✅ 드래그하며 좌표가 바뀔 때도 에펙 UI 크기를 고정 유지합니다.
+  visualHandles[dragPoint].style.transform = `translate(-50%, -50%) scale(${1 / zoom})`;
+}
 
       updateMappedArea();
     }
@@ -497,9 +499,12 @@ function render() {
     const handle = document.createElement("button");
     handle.className = "pt";
     if (index === selectedPoint) handle.classList.add("selected");
-    handle.style.left = `${point.x}px`;
-    handle.style.top = `${point.y}px`;
-    handle.onpointerdown = (e) => {
+   handle.style.left = `${point.x}px`;
+handle.style.top = `${point.y}px`;
+// ✅ [에펙 스타일] 현재 줌 배율의 역수를 실시간으로 곱해 모니터상 24px 크기를 강제 고정합니다.
+handle.style.transform = `translate(-50%, -50%) scale(${1 / zoom})`;
+
+handle.onpointerdown = (e) => { // ...이하 동일
       e.stopPropagation();
       selectedPoint = index;
       dragPoint = index;
