@@ -4,9 +4,9 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Spatial Facade Mapper</title>
-    <link rel="stylesheet" href="./style.css" />
+  <link rel="stylesheet" href="./style.css" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
   <script async src="https://docs.opencv.org/4.8.0/opencv.js"></script>
-
 </head>
 <body>
   <main class="app">
@@ -25,13 +25,17 @@
     </section>
 
     <div class="main-layout">
+      
       <div id="stageScroll" class="stage-scroll">
         <div id="stage" class="stage">
+          <div id="webgl-container" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%;"></div>
+
           <img id="bgImg" alt="배경 이미지">
           <div id="mapped" class="mapped empty">
             <img id="mapImg" alt="파사드 이미지">
             <video id="mapVideo" muted loop playsinline></video>
           </div>
+
           <svg id="overlay" class="overlay">
             <defs><clipPath id="maskClip"><path id="clipPathData" d=""></path></clipPath></defs>
             <path id="poly" d=""></path>
@@ -57,12 +61,22 @@
             <button id="scanButton" disabled>스캔 실행</button>
             <button id="nextCandidateButton" disabled>다음 후보 →</button>
           </div>
+
           <div class="step-group">
             <span class="step-label">③ 핀 조정</span>
+            <div style="display: flex; gap: 14px; width: 100%; margin: 4px 0 8px 4px; font-size: 13px; color: #cbd5e1;">
+              <label style="display: inline-flex; align-items: center; gap: 5px; cursor: pointer;">
+                <input type="radio" name="editMode" id="modeWarp" value="warp" checked style="cursor: pointer;"> 파사드 워프
+              </label>
+              <label style="display: inline-flex; align-items: center; gap: 5px; cursor: pointer;">
+                <input type="radio" name="editMode" id="modeMask" value="mask" style="cursor: pointer;"> 영역 마스크
+              </label>
+            </div>
             <button id="addPointButton" disabled>핀 추가</button>
             <button id="deletePointButton" disabled>핀 삭제</button>
             <button id="resetButton" disabled>초기화</button>
           </div>
+
           <div class="step-group">
             <span class="step-label">④ 톤 보정</span>
             <label>투명도 <input id="opacitySlider" type="range" min="0" max="100" value="100"></label>
@@ -89,10 +103,10 @@
           <p><span>모드</span><b id="modeInfo">대기</b></p>
         </div>
       </aside>
-    </div>
+    </div> 
   </main>
 
-<script>
+  <script>
     const resizer = document.getElementById('resizer');
     const sidePanel = document.getElementById('sidePanel');
 
@@ -114,7 +128,7 @@
     }
   </script>
 
-  <canvas id="scanCanvas" hidden></canvas>
+  <canvas id="scanCanvas" style="display: none;"></canvas> 
   <script src="./app.js"></script>
 </body>
 </html>
