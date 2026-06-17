@@ -149,11 +149,8 @@ input[type="range"] {
   background: #050608;
   position: relative;
   
-  /* 🌟 [수정] 무대 중심 정렬(center) 대신 좌상단 분리 정렬을 사용하여 */
-  /* Scale 변환 시 정렬 기준점이 흔들리며 마우스 좌표가 튀는 마스킹 결함 완벽 방지 */
-  display: flex;
-  justify-content: flex-start;
-  align-items: flex-start;
+  /* ✅ 무대의 유연한 크기 변화를 수용하기 위해 display: block으로 레이아웃 흐름을 환원합니다. */
+  display: block;
   padding: 40px; 
 }
 
@@ -198,20 +195,25 @@ input[type="range"] {
   display: block;      
   transform-origin: 0 0;
   background: #050608;
-  width: max-content;   
+  
+  /* ✅ 무대의 본래 크기 측정 방식을 유지하여 이미지가 사라지는 현상을 막고, 대형 이미지 제약만 풉니다. */
+  max-width: none !important;
+  max-height: none !important;
 }
 
 #bgImg {
-  position: absolute;   /* 🟢 [추가] 좌상단(0,0)에 절대 좌표로 고정 */
-  left: 0;              /* 🟢 [추가] */
-  top: 0;               /* 🟢 [추가] */
+  /* ✅ absolute를 지우고 일반 block 상태로 되돌려 무대 크기가 정상 측정되게 합니다. */
   display: block;
-  width: 100%;          
-  height: 100%;         
-  object-fit: fill;     /* 🟢 [변경] contain에서 fill로 변경 (스테이지 크기에 꽉 채움) */
+  
+  /* ✅ 대형 이미지가 가로폭 제약을 받아 세로로만 길어지는 찌그러짐 현상을 100% 차단합니다. */
+  max-width: none !important;
+  max-height: none !important;
+  width: auto !important;
+  height: auto !important;
+  
   user-select: none;
   pointer-events: none;
-  z-index: 1;           /* 🟢 [추가] 가장 아래 레이어로 설정 */
+  z-index: 1;           
 }
 
 #bgImg:not([src]),
@@ -260,6 +262,8 @@ input[type="range"] {
   stroke: rgba(34, 211, 238, 0.95);
   stroke-width: 3;
   fill-rule: evenodd;
+  /* ✅ [에펙 스타일 완벽 구현] 이미지가 아무리 크거나 작아져도 가이드라인 선 두께를 화면 기준 3px로 고정합니다. */
+  vector-effect: non-scaling-stroke;
 }
 
 #scanRect {
