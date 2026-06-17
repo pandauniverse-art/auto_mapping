@@ -52,6 +52,16 @@
           <label>파사드 콘텐츠 <select id="contentSelect"><option value="">콘텐츠 선택</option></select></label>
           
           <div class="step-group">
+            <span class="step-label">● 매핑 채널 레이어 선택</span>
+            <div style="display: flex; gap: 6px; margin-top: 6px;">
+              <button type="button" class="layer-btn active" onclick="switchLayer(0)" style="flex:1; padding:6px; background:#3b82f6; color:#fff; border:none; border-radius:4px; cursor:pointer;">Wall A</button>
+              <button type="button" class="layer-btn" onclick="switchLayer(1)" style="flex:1; padding:6px; background:#1e293b; color:#fff; border:none; border-radius:4px; cursor:pointer;">Wall B</button>
+              <button type="button" class="layer-btn" onclick="switchLayer(2)" style="flex:1; padding:6px; background:#1e293b; color:#fff; border:none; border-radius:4px; cursor:pointer;">Wall C</button>
+              <button type="button" class="layer-btn" onclick="switchLayer(3)" style="flex:1; padding:6px; background:#1e293b; color:#fff; border:none; border-radius:4px; cursor:pointer;">Wall D</button>
+            </div>
+          </div>
+          
+          <div class="step-group">
             <span class="step-label">① 영역 지정</span>
             <button id="scanAreaButton" disabled>영역 드래그</button>
             <button id="clearScanAreasButton" disabled>영역 지우기</button>
