@@ -9,33 +9,28 @@
   <script async src="https://docs.opencv.org/4.8.0/opencv.js"></script>
 </head>
 <body>
-  <main class="app">
-    <header>
-      <h1>Spatial Facade Mapper</h1>
-      <p>배경 이미지를 넣고, 스캔 영역을 드래그한 뒤 파사드 콘텐츠를 공간에 맞춰 확인합니다.</p>
-    </header>
+  <div class="app">
 
-    <section id="dropZone" class="drop">
-      <strong>파일 또는 폴더를 화면에 드래그하세요</strong>
-      <span>첫 이미지는 배경으로, 이후 이미지/영상은 파사드 콘텐츠로 자동 적용됩니다.</span>
-      <div>
-        <label>파일 선택 <input id="fileInput" type="file" multiple accept="image/*,video/*"></label>
-        <label>폴더 선택 <input id="folderInput" type="file" webkitdirectory directory multiple></label>
-      </div>
-    </section>
+    <!-- ① 상단 툴바 (40px 고정) -->
+    <div class="toolbar">
+      <span class="toolbar-title">Spatial Facade Mapper</span>
+      <label class="toolbar-btn">파일 선택 <input id="fileInput" type="file" multiple accept="image/*,video/*"></label>
+      <label class="toolbar-btn">폴더 선택 <input id="folderInput" type="file" webkitdirectory directory multiple></label>
+      <div id="dropZone" class="toolbar-drop"></div>
+    </div>
 
+    <!-- ② 중간 메인 영역 (flex:1, 남은 공간 전부) -->
     <div class="main-layout">
-      
+
+      <!-- 스테이지 -->
       <div id="stageScroll" class="stage-scroll">
         <div id="stage" class="stage">
-          <div id="webgl-container" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%;"></div>
-
+          <div id="webgl-container" style="position:absolute;top:0;left:0;width:100%;height:100%;"></div>
           <img id="bgImg" alt="배경 이미지">
           <div id="mapped" class="mapped empty">
             <img id="mapImg" alt="파사드 이미지">
             <video id="mapVideo" muted loop playsinline></video>
           </div>
-
           <svg id="overlay" class="overlay">
             <defs><clipPath id="maskClip"><path id="clipPathData" d=""></path></clipPath></defs>
             <path id="poly" d=""></path>
@@ -46,99 +41,135 @@
 
       <div id="resizer" class="resizer"></div>
 
+      <!-- 우측 패널 -->
       <aside class="side-panel" id="sidePanel">
-        <section class="controls">
-          <label>배경 이미지 <select id="bgSelect"><option value="">배경 선택</option></select></label>
-          <label>파사드 콘텐츠 <select id="contentSelect"><option value="">콘텐츠 선택</option></select></label>
-          
-          <div class="step-group">
-            <span class="step-label">● 매핑 채널 레이어 선택</span>
-            <div style="display: flex; gap: 6px; margin-top: 6px;">
-              <button type="button" class="layer-btn active" onclick="switchLayer(0)" style="flex:1; padding:6px; background:#3b82f6; color:#fff; border:none; border-radius:4px; cursor:pointer;">Wall A</button>
-              <button type="button" class="layer-btn" onclick="switchLayer(1)" style="flex:1; padding:6px; background:#1e293b; color:#fff; border:none; border-radius:4px; cursor:pointer;">Wall B</button>
-              <button type="button" class="layer-btn" onclick="switchLayer(2)" style="flex:1; padding:6px; background:#1e293b; color:#fff; border:none; border-radius:4px; cursor:pointer;">Wall C</button>
-              <button type="button" class="layer-btn" onclick="switchLayer(3)" style="flex:1; padding:6px; background:#1e293b; color:#fff; border:none; border-radius:4px; cursor:pointer;">Wall D</button>
-            </div>
-          </div>
-          
-          <div class="step-group">
-            <span class="step-label">① 영역 지정</span>
-            <button id="scanAreaButton" disabled>영역 드래그</button>
-            <button id="clearScanAreasButton" disabled>영역 지우기</button>
-          </div>
-          <div class="step-group">
-            <span class="step-label">② AI 스캔</span>
-            <button id="scanButton" disabled>스캔 실행</button>
-            <button id="nextCandidateButton" disabled>다음 후보 →</button>
-          </div>
 
-          <div class="step-group">
-            <span class="step-label">③ 핀 조정</span>
-            <div style="display: flex; gap: 14px; width: 100%; margin: 4px 0 8px 4px; font-size: 13px; color: #cbd5e1;">
-              <label style="display: inline-flex; align-items: center; gap: 5px; cursor: pointer;">
-                <input type="radio" name="editMode" id="modeWarp" value="warp" checked style="cursor: pointer;"> 파사드 워프
-              </label>
-              <label style="display: inline-flex; align-items: center; gap: 5px; cursor: pointer;">
-                <input type="radio" name="editMode" id="modeMask" value="mask" style="cursor: pointer;"> 영역 마스크
-              </label>
-            </div>
-            <button id="addPointButton" disabled>핀 추가</button>
-            <button id="deletePointButton" disabled>핀 삭제</button>
-            <button id="resetButton" disabled>초기화</button>
-          </div>
-
-          <div class="step-group">
-            <span class="step-label">④ 톤 보정</span>
-            <label>투명도 <input id="opacitySlider" type="range" min="0" max="100" value="100"></label>
-            <label>밝기 <input id="brightnessSlider" type="range" min="0" max="200" value="100"></label>
-            <label>합성 모드 
-              <select id="blendModeSelect">
-                <option value="normal">Normal</option>
-                <option value="screen">Screen</option>
-                <option value="multiply">Multiply</option>
-                <option value="overlay">Overlay</option>
-              </select>
-            </label>
-          </div>
-          <label class="check"><input id="guideToggle" type="checkbox" checked> 가이드 표시</label>
-          <label>배경 크기 <input id="zoomSlider" type="range" min="0" max="200" value="100"></label>
-        </section>
-
-        <div class="status-panel">
-          <h2>파일 목록</h2>
-          <div id="fileList" class="file-list"></div>
-          <h2>상태</h2>
-          <p><span>배경</span><b id="bgInfo">없음</b></p>
-          <p><span>콘텐츠</span><b id="contentInfo">없음</b></p>
-          <p><span>모드</span><b id="modeInfo">대기</b></p>
+        <div class="panel-row">
+          <label class="panel-label">배경
+            <select id="bgSelect"><option value="">선택</option></select>
+          </label>
+          <label class="panel-label">콘텐츠
+            <select id="contentSelect"><option value="">선택</option></select>
+          </label>
         </div>
+
+        <!-- 레이어 탭 -->
+        <div class="layer-tabs">
+          <button type="button" class="layer-btn active" onclick="switchLayer(0)">Wall A</button>
+          <button type="button" class="layer-btn" onclick="switchLayer(1)">Wall B</button>
+          <button type="button" class="layer-btn" onclick="switchLayer(2)">Wall C</button>
+          <button type="button" class="layer-btn" onclick="switchLayer(3)">Wall D</button>
+        </div>
+
+        <div class="step-group">
+          <span class="step-label">① 영역</span>
+          <button id="scanAreaButton" disabled>드래그</button>
+          <button id="clearScanAreasButton" disabled>지우기</button>
+        </div>
+
+        <div class="step-group">
+          <span class="step-label">② AI스캔</span>
+          <button id="scanButton" disabled>스캔</button>
+          <button id="nextCandidateButton" disabled>다음 →</button>
+        </div>
+
+        <div class="step-group">
+          <span class="step-label">③ 핀</span>
+          <label class="radio-label"><input type="radio" name="editMode" id="modeWarp" value="warp" checked> 워프</label>
+          <label class="radio-label"><input type="radio" name="editMode" id="modeMask" value="mask"> 마스크</label>
+          <button id="addPointButton" disabled>추가</button>
+          <button id="deletePointButton" disabled>삭제</button>
+          <button id="resetButton" disabled>초기화</button>
+        </div>
+
+        <div class="step-group">
+          <span class="step-label">④ 톤</span>
+          <label class="slider-label">투명도 <input id="opacitySlider" type="range" min="0" max="100" value="100"></label>
+          <label class="slider-label">밝기 <input id="brightnessSlider" type="range" min="0" max="200" value="100"></label>
+          <label class="slider-label">블렌드
+            <select id="blendModeSelect">
+              <option value="normal">Normal</option>
+              <option value="screen">Screen</option>
+              <option value="multiply">Multiply</option>
+              <option value="overlay">Overlay</option>
+            </select>
+          </label>
+        </div>
+
+        <div class="step-group">
+          <label class="radio-label"><input id="guideToggle" type="checkbox" checked> 가이드</label>
+          <label class="slider-label">줌 <input id="zoomSlider" type="range" min="0" max="200" value="100"></label>
+        </div>
+
+        <div class="status-mini">
+          <span id="bgInfo">배경: 없음</span>
+          <span id="contentInfo">콘텐츠: 없음</span>
+          <span id="modeInfo">대기</span>
+        </div>
+
+        <div class="file-list" id="fileList"></div>
+
       </aside>
-    </div> 
-  </main>
+    </div>
+
+    <!-- ③ 하단 타임라인 (130px 고정) -->
+    <div class="timeline-panel" id="timelinePanel">
+      <div class="tl-top">
+        <button id="masterPlayBtn" onclick="isPlaying ? syncPause() : syncPlay()">▶ 재생</button>
+        <span id="timeDisplay" class="tl-time">00:00:00</span>
+        <input id="seekBar" type="range" min="0" max="100" value="0" step="0.1" oninput="syncSeek(+this.value)" class="tl-seek">
+        <button id="exportStartBtn" onclick="startExport()">⏺ 녹화</button>
+        <button id="exportStopBtn" onclick="stopExport()" disabled>⏹ 저장</button>
+        <button onclick="exportImage()">📷 PNG</button>
+      </div>
+      <div class="tl-offsets">
+        <div class="tl-ch">
+          <span>Wall A</span>
+          <input type="range" min="-10" max="10" step="0.1" value="0" oninput="setLayerOffset(0,+this.value);this.nextElementSibling.textContent=(+this.value).toFixed(1)+'s'">
+          <span class="tl-val">0.0s</span>
+        </div>
+        <div class="tl-ch">
+          <span>Wall B</span>
+          <input type="range" min="-10" max="10" step="0.1" value="0" oninput="setLayerOffset(1,+this.value);this.nextElementSibling.textContent=(+this.value).toFixed(1)+'s'">
+          <span class="tl-val">0.0s</span>
+        </div>
+        <div class="tl-ch">
+          <span>Wall C</span>
+          <input type="range" min="-10" max="10" step="0.1" value="0" oninput="setLayerOffset(2,+this.value);this.nextElementSibling.textContent=(+this.value).toFixed(1)+'s'">
+          <span class="tl-val">0.0s</span>
+        </div>
+        <div class="tl-ch">
+          <span>Wall D</span>
+          <input type="range" min="-10" max="10" step="0.1" value="0" oninput="setLayerOffset(3,+this.value);this.nextElementSibling.textContent=(+this.value).toFixed(1)+'s'">
+          <span class="tl-val">0.0s</span>
+        </div>
+      </div>
+    </div>
+
+  </div>
 
   <script>
     const resizer = document.getElementById('resizer');
     const sidePanel = document.getElementById('sidePanel');
-
     resizer.addEventListener('mousedown', () => {
       document.addEventListener('mousemove', resize);
       document.addEventListener('mouseup', stopResize);
     });
-
     function resize(e) {
       const newWidth = document.body.clientWidth - e.clientX;
-      if (newWidth > 320 && newWidth < 520) {
-        sidePanel.style.width = `${newWidth}px`;
-      }
+      if (newWidth > 240 && newWidth < 480) sidePanel.style.width = newWidth + 'px';
     }
-
     function stopResize() {
       document.removeEventListener('mousemove', resize);
       document.removeEventListener('mouseup', stopResize);
     }
+
+    // 드래그 드롭 전체 화면 처리
+    ['dragenter','dragover'].forEach(n => window.addEventListener(n, e => e.preventDefault()));
+    window.addEventListener('drop', e => { e.preventDefault(); });
   </script>
 
-  <canvas id="scanCanvas" style="display: none;"></canvas> 
+  <canvas id="scanCanvas" style="display:none;"></canvas>
   <script src="./app.js"></script>
 </body>
 </html>
