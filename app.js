@@ -58,12 +58,111 @@ let layerMaskMeshes = []; // ✅ WebGL 내부 전용 마스크 mesh 배열
 
 // ✅ 4채널 이머시브 독립 미디어 레이어 구조 정의
 let mappingLayers = [
-  { id: "Wall A", source: null, warpPoints: [], maskPoints: [], warpOrigPoints: [], opacity: 100, brightness: 100, blendMode: "normal" },
-  { id: "Wall B", source: null, warpPoints: [], maskPoints: [], warpOrigPoints: [], opacity: 100, brightness: 100, blendMode: "normal" },
-  { id: "Wall C", source: null, warpPoints: [], maskPoints: [], warpOrigPoints: [], opacity: 100, brightness: 100, blendMode: "normal" },
-  { id: "Wall D", source: null, warpPoints: [], maskPoints: [], warpOrigPoints: [], opacity: 100, brightness: 100, blendMode: "normal" }
+  { id: "Wall A", source: null, warpPoints: [], maskPoints: [], warpOrigPoints: [], opacity: 100, brightness: 100, blendMode: "normal", offset: 0 },
+  { id: "Wall B", source: null, warpPoints: [], maskPoints: [], warpOrigPoints: [], opacity: 100, brightness: 100, blendMode: "normal", offset: 0 },
+  { id: "Wall C", source: null, warpPoints: [], maskPoints: [], warpOrigPoints: [], opacity: 100, brightness: 100, blendMode: "normal", offset: 0 },
+  { id: "Wall D", source: null, warpPoints: [], maskPoints: [], warpOrigPoints: [], opacity: 100, brightness: 100, blendMode: "normal", offset: 0 }
 ];
 let activeLayerIndex = 0;
+
+// ── 마스터 싱크 클락 ──────────────────────────────────────
+let audioCtx = null;
+let masterStartTime = 0;   // AudioContext 기준 재생 시작 시각
+let masterOffset = 0;      // 일시정지 시 누적 재생 위치 (초)
+let isPlaying = false;
+let driftTimer = null;
+
+function getAudioCtx() {
+  if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  return audioCtx;
+}
+
+function syncPlay() {
+  const ctx = getAudioCtx();
+  if (ctx.state === "suspended") ctx.resume();
+
+  // 모든 채널 Promise.all 로드 대기 후 동시 시작
+  const readyChecks = mappingLayers.map(layer => {
+    if (!layer.source || layer.source.tagName !== "VIDEO") return Promise.resolve();
+    if (layer.source.readyState >= 3) return Promise.resolve();
+    return new Promise(res => { layer.source.oncanplay = res; });
+  });
+
+  Promise.all(readyChecks).then(() => {
+    masterStartTime = ctx.currentTime;
+    mappingLayers.forEach(layer => {
+      if (!layer.source || layer.source.tagName !== "VIDEO") return;
+      layer.source.currentTime = layer.offset;
+      layer.source.play().catch(() => {});
+    });
+    isPlaying = true;
+    updatePlayUI(true);
+
+    // 드리프트 보정 루프 (50ms)
+    clearInterval(driftTimer);
+    driftTimer = setInterval(() => {
+      if (!isPlaying) return;
+      const elapsed = ctx.currentTime - masterStartTime + masterOffset;
+      mappingLayers.forEach(layer => {
+        if (!layer.source || layer.source.tagName !== "VIDEO" || layer.source.paused) return;
+        const expected = (elapsed + layer.offset) % (layer.source.duration || 1);
+        const diff = Math.abs(layer.source.currentTime - expected);
+        if (diff > 0.05) layer.source.currentTime = expected; // 50ms 이상 오차 보정
+      });
+    }, 50);
+  });
+}
+
+function syncPause() {
+  const ctx = getAudioCtx();
+  masterOffset += ctx.currentTime - masterStartTime;
+  mappingLayers.forEach(layer => {
+    if (layer.source && layer.source.tagName === "VIDEO") layer.source.pause();
+  });
+  isPlaying = false;
+  clearInterval(driftTimer);
+  updatePlayUI(false);
+}
+
+function syncSeek(seconds) {
+  masterOffset = seconds;
+  masterStartTime = getAudioCtx().currentTime;
+  mappingLayers.forEach(layer => {
+    if (!layer.source || layer.source.tagName !== "VIDEO") return;
+    layer.source.currentTime = (seconds + layer.offset) % (layer.source.duration || 1);
+  });
+}
+
+window.setLayerOffset = function(layerIndex, seconds) {
+  mappingLayers[layerIndex].offset = seconds;
+  if (isPlaying) {
+    const elapsed = getAudioCtx().currentTime - masterStartTime + masterOffset;
+    const src = mappingLayers[layerIndex].source;
+    if (src && src.tagName === "VIDEO") {
+      src.currentTime = (elapsed + seconds) % (src.duration || 1);
+    }
+  }
+};
+
+function updatePlayUI(playing) {
+  const btn = document.getElementById("masterPlayBtn");
+  if (btn) btn.textContent = playing ? "⏸ 일시정지" : "▶ 전체 재생";
+}
+
+// 타임코드 표시 업데이트 (requestAnimationFrame 루프에서 호출)
+function updateTimeDisplay() {
+  if (!isPlaying) return;
+  const ctx = getAudioCtx();
+  const elapsed = ctx.currentTime - masterStartTime + masterOffset;
+  const display = document.getElementById("timeDisplay");
+  if (display) {
+    const m = Math.floor(elapsed / 60).toString().padStart(2, "0");
+    const s = Math.floor(elapsed % 60).toString().padStart(2, "0");
+    const f = Math.floor((elapsed % 1) * 30).toString().padStart(2, "0");
+    display.textContent = `${m}:${s}:${f}`;
+  }
+}
+// ────────────────────────────────────────────────────────
 
 // 마스크 전용 데이터와 워프 전용 데이터 격리 연동 핸들러 변수
 let maskPoints = [];
@@ -415,7 +514,13 @@ function setContent(file) {
     mediaEl = document.createElement("video");
     mediaEl.src = url;
     mediaEl.muted = true;
-    mediaEl.loop = true;
+    mediaEl.loop = false; // 싱크 엔진이 ended 이벤트로 재루프 처리
+mediaEl.addEventListener("ended", () => {
+  if (isPlaying) {
+    mediaEl.currentTime = mappingLayers.find(l => l.source === mediaEl)?.offset || 0;
+    mediaEl.play().catch(() => {});
+  }
+});
     mediaEl.playsInline = true;
     mediaEl.style.visibility = "hidden";
     mediaEl.style.position = "absolute";
@@ -964,7 +1069,7 @@ function initThree() {
   container.innerHTML = ""; 
   
   // 1. WebGL 렌더러 생성 (스텐실 버퍼 활성화)
-  renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true, stencil: true });
+  renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true, stencil: true, preserveDrawingBuffer: true });
   renderer.setSize(container.clientWidth || 800, container.clientHeight || 600);
   renderer.domElement.style.position = "absolute";
   renderer.domElement.style.top = "0"; renderer.domElement.style.left = "0";
@@ -1029,14 +1134,107 @@ function initThree() {
 
   stage.insertBefore(container, overlay);
 
-  function animate() {
-    requestAnimationFrame(animate);
-    updateMappedArea();
-    if (renderer && scene && camera) {
-      renderer.render(scene, camera);
-    }
-  }
+ // ← initThree() 함수 상단, mappingLayers 선언 아래 전역에 추가
+let _dirty = true;
+function markDirty() { _dirty = true; }
+
+function animate() {
   requestAnimationFrame(animate);
 
+  // 비디오 재생 중이면 매 프레임 갱신, 아니면 dirty 시에만 갱신
+  const hasVideo = mappingLayers.some(l => l.source && l.source.tagName === "VIDEO" && !l.source.paused);
+  if (hasVideo || _dirty) {
+  updateMappedArea();
+  _dirty = false;
+}
+updateTimeDisplay(); // ← 타임코드 디스플레이 갱신
+  if (renderer && scene && camera) {
+    renderer.render(scene, camera);
+  }
+}
+requestAnimationFrame(animate);
+
   console.log("🚀 GPU 가속 WebGL 씬 컴포지션 엔진 구성 완료");
+  // ── 익스포트 엔진 ─────────────────────────────────────────
+let mediaRecorder = null;
+let recordedChunks = [];
+
+window.startExport = function() {
+  if (mediaRecorder && mediaRecorder.state === "recording") {
+    alert("이미 녹화 중입니다.");
+    return;
+  }
+
+  // WebGL canvas stream 캡처
+  const stream = renderer.domElement.captureStream(60);
+
+  // 지원 코덱 자동 선택 (VP9 → VP8 → 기본값 순)
+  const mimeType = ["video/webm;codecs=vp9", "video/webm;codecs=vp8", "video/webm"]
+    .find(m => MediaRecorder.isTypeSupported(m)) || "video/webm";
+
+  mediaRecorder = new MediaRecorder(stream, {
+    mimeType,
+    videoBitsPerSecond: 8_000_000  // 8Mbps
+  });
+
+  recordedChunks = [];
+  mediaRecorder.ondataavailable = e => {
+    if (e.data.size > 0) recordedChunks.push(e.data);
+  };
+
+  mediaRecorder.onstop = () => {
+    const blob = new Blob(recordedChunks, { type: "video/webm" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `facade_export_${Date.now()}.webm`;
+    a.click();
+    URL.revokeObjectURL(url);
+    updateExportUI(false);
+    modeInfo.textContent = "익스포트 완료 (.webm)";
+  };
+
+  // 싱크 재생 시작 후 녹화 시작
+  syncPlay();
+  mediaRecorder.start(100); // 100ms 청크
+  updateExportUI(true);
+  modeInfo.textContent = "녹화 중... (정지 버튼으로 종료)";
+
+  // 가장 긴 채널 길이 기준 자동 종료
+  const maxDuration = Math.max(
+    ...mappingLayers.map(l => l.source?.duration || 0)
+  );
+  if (maxDuration > 0) {
+    setTimeout(() => window.stopExport(), maxDuration * 1000 + 500);
+  }
+};
+
+window.stopExport = function() {
+  if (mediaRecorder && mediaRecorder.state === "recording") {
+    mediaRecorder.stop();
+    syncPause();
+  }
+};
+
+window.exportImage = function() {
+  // preserveDrawingBuffer 없이도 toBlob 직전 한 프레임 강제 렌더
+  renderer.render(scene, camera);
+  renderer.domElement.toBlob(blob => {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `facade_snapshot_${Date.now()}.png`;
+    a.click();
+    URL.revokeObjectURL(url);
+    modeInfo.textContent = "스냅샷 저장 완료 (.png)";
+  }, "image/png");
+};
+
+function updateExportUI(recording) {
+  const startBtn = document.getElementById("exportStartBtn");
+  const stopBtn = document.getElementById("exportStopBtn");
+  if (startBtn) startBtn.disabled = recording;
+  if (stopBtn) stopBtn.disabled = !recording;
+}
+// ─────────────────────────────────────────────────────────
 }
