@@ -52,14 +52,16 @@ let canvas2d, ctx2d, currentFacadeSource;
 
 // 📌 WebGL GPU 가속용 변수 추가
 let scene, camera, renderer;
-let layerMeshes = [];
+let layerMeshes = []; 
+let bgMesh;             // ✅ WebGL 내부 전용 배경 레이어 mesh
+let layerMaskMeshes = []; // ✅ WebGL 내부 전용 마스크 mesh 배열
 
 // ✅ 4채널 이머시브 독립 미디어 레이어 구조 정의
 let mappingLayers = [
-  { id: "Wall A", source: null, warpPoints: [], maskPoints: [], warpOrigPoints: [] },
-  { id: "Wall B", source: null, warpPoints: [], maskPoints: [], warpOrigPoints: [] },
-  { id: "Wall C", source: null, warpPoints: [], maskPoints: [], warpOrigPoints: [] },
-  { id: "Wall D", source: null, warpPoints: [], maskPoints: [], warpOrigPoints: [] }
+  { id: "Wall A", source: null, warpPoints: [], maskPoints: [], warpOrigPoints: [], opacity: 100, brightness: 100, blendMode: "normal" },
+  { id: "Wall B", source: null, warpPoints: [], maskPoints: [], warpOrigPoints: [], opacity: 100, brightness: 100, blendMode: "normal" },
+  { id: "Wall C", source: null, warpPoints: [], maskPoints: [], warpOrigPoints: [], opacity: 100, brightness: 100, blendMode: "normal" },
+  { id: "Wall D", source: null, warpPoints: [], maskPoints: [], warpOrigPoints: [], opacity: 100, brightness: 100, blendMode: "normal" }
 ];
 let activeLayerIndex = 0;
 
@@ -198,13 +200,15 @@ function bindUiEvents() {
 
   // 🌟 실시간 색감/블렌딩 스타일 연동
   const updateMediaStyle = () => {
-    const target = mapVideo.style.display === "block" ? mapVideo : mapImg;
-    target.style.opacity = "0.001"; 
-    target.style.mixBlendMode = blendModeSelect.value;
+    const layer = mappingLayers[activeLayerIndex];
+    if (!layer) return;
     
-    if (canvas2d) {
-      canvas2d.style.mixBlendMode = blendModeSelect.value;
-    }
+    // ✅ 글로벌 슬라이더 값을 현재 선택된 채널의 고유 메모리에 격리 저장합니다.
+    layer.opacity = +opacitySlider.value;
+    layer.brightness = +brightnessSlider.value;
+    layer.blendMode = blendModeSelect.value;
+    
+    updateMappedArea();
   };
 
   opacitySlider.oninput = updateMediaStyle;
@@ -350,8 +354,9 @@ function setBackground(file) {
       const availableWidth = parentContainer.clientWidth - padding;
       const scale = Math.min(availableWidth / w, 1);
       
-      zoom = scale;
-      zoomSlider.value = zoom * 100;
+      // ✅ 수정 코드: 처음 로드 시 에펙처럼 무조건 100% 원본 크기로 띄우거나, 한계가 없는 슬라이더 배율로 매칭합니다.
+zoom = scale;
+zoomSlider.value = scale * 100;
       
       stage.style.transform = `scale(${zoom})`;
       stage.style.transformOrigin = "0 0"; 
@@ -361,6 +366,27 @@ function setBackground(file) {
       overlay.setAttribute("viewBox", `0 0 ${w} ${h}`);
       
       bgInfo.textContent = file.name;
+      
+      // ✅ WebGL 바닥 레이어에 배경 이미지 픽셀 맵 동적 로드
+      // ✅ WebGL 바닥 레이어에 배경 이미지 픽셀 맵 동적 로드
+      if (bgMesh) {
+        bgMesh.geometry.dispose();
+        bgMesh.geometry = new THREE.PlaneGeometry(w, h);
+        bgMesh.position.set(w / 2, h / 2, -1);
+        
+        // ❌ 기존 이미지 텍스처 교체 코드
+        if (bgMesh.material.map) bgMesh.material.map.dispose();
+        bgMesh.material.map = new THREE.Texture(bgImg);
+        
+        bgMesh.material.map.wrapS = THREE.ClampToEdgeWrapping;
+        bgMesh.material.map.wrapT = THREE.ClampToEdgeWrapping;
+        bgMesh.material.map.flipY = false; // ✅ 이 줄을 추가하여 배경 이미지의 상하 반전 왜곡을 바로잡습니다.
+        bgMesh.material.map.needsUpdate = true;
+        
+        // ✅ [건물 노출 보정] 배경 재질 자체에도 최초 1회 갱신 신호를 주어 백색 비행을 건물 이미지로 깨웁니다.
+        bgMesh.material.needsUpdate = true;
+      }
+
       fitDefaultPoints();
       enableButtons();
       render();
@@ -421,21 +447,20 @@ function enableButtons() {
   ].forEach((b) => b.disabled = false);
 }
 
+
+
 function fitDefaultPoints() {
   const w = bgImg.naturalWidth || 800;
   const h = bgImg.naturalHeight || 600;
   
-  // ✅ 4개 독립 채널 메모리 공간 초기화 및 독립 마스크 범위 부여
   mappingLayers.forEach((layer) => {
-    layer.maskPoints = [
-      { x: 0, y: 0 }, { x: w, y: 0 },
-      { x: w, y: h }, { x: 0, y: h }
-    ];
-    layer.warpPoints = [
-      { x: w * 0.2, y: h * 0.22 }, { x: w * 0.8, y: h * 0.22 },
-      { x: w * 0.8, y: h * 0.78 }, { x: w * 0.2, y: h * 0.78 }
-    ];
+    layer.maskPoints = [{ x: 0, y: 0 }, { x: w, y: 0 }, { x: w, y: h }, { x: 0, y: h }];
+    layer.warpPoints = [{ x: w * 0.2, y: h * 0.22 }, { x: w * 0.8, y: h * 0.22 }, { x: w * 0.8, y: h * 0.78 }, { x: w * 0.2, y: h * 0.78 }];
     layer.warpOrigPoints = [];
+    // 기본 수치 리셋 세팅
+    layer.opacity = 100;
+    layer.brightness = 100;
+    layer.blendMode = "normal";
   });
 
   syncActiveLayerData();
@@ -447,12 +472,21 @@ function syncActiveLayerData() {
   maskPoints = layer.maskPoints;
   warpOrigPoints = layer.warpOrigPoints;
   
+  // ✅ 채널 변환 시 우측 패널 슬라이더 눈금 수치들을 개별 레이어 값으로 강제 복구 연동합니다.
+  opacitySlider.value = layer.opacity !== undefined ? layer.opacity : 100;
+  brightnessSlider.value = layer.brightness !== undefined ? layer.brightness : 100;
+  blendModeSelect.value = layer.blendMode || "normal";
+
   const modeMask = document.getElementById("modeMask");
   points = (modeMask && modeMask.checked) ? maskPoints : warpPoints;
 }
 
-// ✅ 글로벌 스위칭 인터페이스 제어 장치 추가
 window.switchLayer = function(index) {
+  // 슬라이더 최종 제어 수치 메모리 백업
+  mappingLayers[activeLayerIndex].opacity = +opacitySlider.value;
+  mappingLayers[activeLayerIndex].brightness = +brightnessSlider.value;
+  mappingLayers[activeLayerIndex].blendMode = blendModeSelect.value;
+
   mappingLayers[activeLayerIndex].warpPoints = warpPoints;
   mappingLayers[activeLayerIndex].maskPoints = maskPoints;
   mappingLayers[activeLayerIndex].warpOrigPoints = warpOrigPoints;
@@ -517,7 +551,6 @@ handle.onpointerdown = (e) => { // ...이하 동일
 function updateMappedArea() {
   if (!bgImg.src || !scene) return;
 
-  // 배경 이미지 스케일에 맞춰 WebGL 도화지 크기 실시간 동기화
   if (renderer) {
     const w = bgImg.naturalWidth || 800;
     const h = bgImg.naturalHeight || 600;
@@ -534,17 +567,46 @@ function updateMappedArea() {
     mappingLayers[activeLayerIndex].warpOrigPoints = warpOrigPoints;
   }
 
-  // 4개 레이어를 순회하며 정점 버퍼 위치만 초고속 갱신
   mappingLayers.forEach((layer, idx) => {
     const mesh = layerMeshes[idx];
+    const maskMesh = layerMaskMeshes[idx];
     if (!mesh || !layer.source) return;
     if (layer.source.tagName === "VIDEO" && layer.source.readyState < 2) return;
 
-    mesh.material.opacity = opacitySlider.value / 100;
+    // 1. 투명도 및 밝기 개별 제어
+    mesh.material.opacity = (layer.opacity !== undefined ? layer.opacity : 100) / 100;
+    const b = (layer.brightness !== undefined ? layer.brightness : 100) / 100;
+    mesh.material.color.setRGB(b, b, b);
 
+    // 2. 에펙 프로덕션 합성 모드 (WebGL 하드웨어 블렌딩 맵핑)
+    if (layer.blendMode === "screen") {
+      mesh.material.blending = THREE.AdditiveBlending; 
+    } else if (layer.blendMode === "multiply") {
+      mesh.material.blending = THREE.MultiplyBlending; // 배경 레이어가 내부에 잡혀 정상 작동합니다.
+    } else if (layer.blendMode === "overlay") {
+      mesh.material.blending = THREE.SubtractiveBlending; // 하드웨어 반전 오버레이 대용
+    } else {
+      mesh.material.blending = THREE.NormalBlending;   
+    }
+    // ✅ mesh.material.needsUpdate = true;  <- 이 줄을 깔끔하게 지워줍니다.
+
+    // 3. 🟢 [실시간 마스크 절삭] 영역 마스크 정점을 이용해 3D 공간에서 비디오 커팅 연산
+    if (maskMesh && layer.maskPoints && layer.maskPoints.length > 2) {
+      const maskGeom = maskMesh.geometry;
+      const verts = [];
+      // 폴리곤을 삼각형들로 쪼개어 스텐실 평면 빌드 (Triangle Fan 공식)
+      for (let i = 1; i < layer.maskPoints.length - 1; i++) {
+        verts.push(layer.maskPoints[0].x, layer.maskPoints[0].y, 0);
+        verts.push(layer.maskPoints[i].x, layer.maskPoints[i].y, 0);
+        verts.push(layer.maskPoints[i+1].x, layer.maskPoints[i+1].y, 0);
+      }
+      maskGeom.setAttribute('position', new THREE.BufferAttribute(new Float32Array(verts), 3));
+      maskGeom.attributes.position.needsUpdate = true;
+    }
+
+    // 4. 파사드 매쉬 워프 정점 연산
     const COLS = 32;
     const ROWS = 32;
-
     const ordered = orderQuad(layer.warpPoints.slice(0, 4));
     const tl = ordered[0]; const tr = ordered[1];
     const br = ordered[2]; const bl = ordered[3];
@@ -556,7 +618,6 @@ function updateMappedArea() {
       const v = r / ROWS;
       for (let c = 0; c <= COLS; c++) {
         const u = c / COLS;
-
         const topX = tl.x * (1 - u) + tr.x * u;
         const topY = tl.y * (1 - u) + tr.y * u;
         const botX = bl.x * (1 - u) + br.x * u;
@@ -571,12 +632,10 @@ function updateMappedArea() {
             const origPin = layer.warpOrigPoints[j];
             const curPin = layer.warpPoints[j];
             if (!origPin || !curPin) continue;
-
             const dx = sx - origPin.x;
             const dy = sy - origPin.y;
             const distSq = dx * dx + dy * dy + 0.5;
             const weight = 1.0 / Math.pow(distSq, 1.3);
-
             deltaX += (curPin.x - origPin.x) * weight;
             deltaY += (curPin.y - origPin.y) * weight;
             totalWeight += weight;
@@ -585,13 +644,10 @@ function updateMappedArea() {
             sx += deltaX / totalWeight; sy += deltaY / totalWeight;
           }
         }
-
-        // Three.js PlaneGeometry 정점 버퍼에 좌표 직접 주입
         posAttr.setXY(vIdx, sx, sy);
         vIdx++;
       }
     }
-    // GPU에 변경된 정점 데이터를 한 번에 전송
     posAttr.needsUpdate = true;
   });
 }
@@ -874,67 +930,13 @@ function readEntry(entry) {
     resolve([]);
   });
 }
-
-function initThree() {
-  const container = $("webgl-container");
-  if (!container) return;
-  
-  container.innerHTML = ""; 
-  
-  // 1. GPU WebGL 렌더러 생성 및 설정
-  renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
-  renderer.setSize(container.clientWidth || 800, container.clientHeight || 600);
-  renderer.domElement.style.position = "absolute";
-  renderer.domElement.style.top = "0"; renderer.domElement.style.left = "0";
-  renderer.domElement.style.zIndex = "999";
-  renderer.domElement.style.pointerEvents = "none";
-  container.appendChild(renderer.domElement);
-  
-  container.style.position = "absolute";
-  container.style.zIndex = "999";
-  container.style.pointerEvents = "none";
-  
-  scene = new THREE.Scene();
-  
-  // 2. 화면 좌표와 1:1 대응하는 카메라 세팅
-  camera = new THREE.OrthographicCamera(0, container.clientWidth || 800, 0, container.clientHeight || 600, -100, 100);
-  
-  // 3. 4개 채널 독립 WebGL 매쉬(32x32 격자) 사전 생성
-  mappingLayers.forEach(() => {
-    const geometry = new THREE.PlaneGeometry(1, 1, 32, 32);
-    const material = new THREE.MeshBasicMaterial({
-      transparent: true,
-      opacity: 0,
-      side: THREE.DoubleSide
-    });
-    const mesh = new THREE.Mesh(geometry, material);
-    scene.add(mesh);
-    layerMeshes.push(mesh);
-  });
-
-  stage.insertBefore(container, overlay);
-
-  // 4. GPU 최적화 프레임 루프 가동 (60fps)
-  function animate() {
-    requestAnimationFrame(animate);
-    updateMappedArea();
-    if (renderer && scene && camera) {
-      renderer.render(scene, camera);
-    }
-  }
-  requestAnimationFrame(animate);
-
-  console.log("🚀 GPU 가속 WebGL 매핑 엔진 설치 완료 (60fps 고정)");
-}
-
+// 📌 [살려내기] 지워졌던 비디오 텍스처 업로드 엔진 함수를 다시 주입합니다.
 function initOrUpdateFacadeMesh(targetElement, isVideo) {
   const mesh = layerMeshes[activeLayerIndex];
   if (!mesh) return;
 
-  // 비디오가 바뀔 때 기존 GPU 그래픽 메모리 해제 (누수 방지)
   if (mesh.material.map) mesh.material.map.dispose();
 
-  // 비디오 소스를 GPU 가속 텍스처로 변환
   let texture;
   if (isVideo) {
     texture = new THREE.VideoTexture(targetElement);
@@ -945,9 +947,96 @@ function initOrUpdateFacadeMesh(targetElement, isVideo) {
     texture.needsUpdate = true;
   }
 
+  texture.flipY = false; // ✅ 이 줄을 추가하여 얹어질 비디오/이미지 소스의 상하 반전 왜곡을 바로잡습니다.
   mesh.material.map = texture;
   mesh.material.opacity = opacitySlider.value / 100;
-  mesh.material.needsUpdate = true;
+  mesh.material.map.needsUpdate = true;
+  
+  // ✅ [비디오 소스 실종 해결 핵심] 비디오가 탑재될 때 최초 1회 재질 업데이트 신호를 그래픽카드에 신속 전송하여 화면에 띄웁니다.
+  mesh.material.needsUpdate = true; 
   
   console.log(`[GPU 텍스처 변환] ${mappingLayers[activeLayerIndex].id} 비디오 탑재 완료`);
+}
+function initThree() {
+  const container = $("webgl-container");
+  if (!container) return;
+  
+  container.innerHTML = ""; 
+  
+  // 1. WebGL 렌더러 생성 (스텐실 버퍼 활성화)
+  renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true, stencil: true });
+  renderer.setSize(container.clientWidth || 800, container.clientHeight || 600);
+  renderer.domElement.style.position = "absolute";
+  renderer.domElement.style.top = "0"; renderer.domElement.style.left = "0";
+  renderer.domElement.style.zIndex = "2"; // ✅ 배경(1)과 UI오버레이(3) 사이인 '2'층으로 정상 복구
+  renderer.domElement.style.pointerEvents = "none";
+  container.appendChild(renderer.domElement);
+  
+  container.style.position = "absolute";
+  container.style.zIndex = "2"; // ✅ 배경(1)과 UI오버레이(3) 사이인 '2'층으로 정상 복구
+  container.style.pointerEvents = "none";
+  
+  scene = new THREE.Scene();
+  camera = new THREE.OrthographicCamera(0, container.clientWidth || 800, 0, container.clientHeight || 600, -100, 100);
+  
+  // 2. 에펙 컴포지션처럼 맨 바닥에 깔릴 빽그라운드 가상 Mesh 생성
+  const bgGeom = new THREE.PlaneGeometry(1, 1);
+  const bgMat = new THREE.MeshBasicMaterial({ side: THREE.DoubleSide });
+  bgMesh = new THREE.Mesh(bgGeom, bgMat);
+  bgMesh.renderOrder = 0; // 최하단 레이어 고정
+  scene.add(bgMesh);
+  
+  // 3. 4개 채널 독립 워프 매쉬 및 스텐실 마스크 뼈대 생성
+  // 3. 4개 채널 독립 워프 매쉬 및 스텐실 마스크 뼈대 생성
+  mappingLayers.forEach((layer, idx) => {
+    // 3-1. 보이지 않는 마스크 절삭 평면 매쉬 (스텐실 마스크 레이어)
+    const maskGeom = new THREE.BufferGeometry();
+    // ✅ 마스크 절삭 평면이 앞뒷면 구분 없이 무조건 절삭하도록 DoubleSide로 열어줍니다.
+    const maskMat = new THREE.MeshBasicMaterial({ colorWrite: false, depthWrite: false, side: THREE.DoubleSide });
+    maskMat.stencilWrite = true;
+    maskMat.stencilFunc = THREE.AlwaysStencilFunc; // ✅ Func 보정 완료
+    maskMat.stencilRef = idx + 1;                 // ✅ 보정 완료
+    maskMat.stencilOp = THREE.ReplaceStencilOp;
+    
+    // 3-1 구역 내부 상수 변경
+    maskMat.stencilFunc = THREE.AlwaysFunc; // ✅ 정석 상수로 변경 (마스크 차단 해제)
+    maskMat.stencilRef = idx + 1;                  
+    maskMat.stencilOp = THREE.ReplaceStencilOp;
+    
+    const maskMesh = new THREE.Mesh(maskGeom, maskMat);
+    maskMesh.renderOrder = 1; 
+    scene.add(maskMesh);
+    layerMaskMeshes.push(maskMesh);
+
+    // 3-2. 실제 비디오가 뿌려질 파사드 워프 매쉬
+    const geometry = new THREE.PlaneGeometry(1, 1, 32, 32);
+    const material = new THREE.MeshBasicMaterial({
+      transparent: true,
+      opacity: 0,
+      side: THREE.DoubleSide
+    });
+    
+    // 마스크 연동을 위한 스텐실 필터 장착
+    material.stencilWrite = true;
+    material.stencilFunc = THREE.EqualFunc; // ✅ 정석 상수로 변경 (소스 비디오 노출 차단 해제)
+    material.stencilRef = idx + 1;
+    
+    const mesh = new THREE.Mesh(geometry, material);
+    mesh.renderOrder = 2; // 렌더 순서 최상위
+    scene.add(mesh);
+    layerMeshes.push(mesh);
+  });
+
+  stage.insertBefore(container, overlay);
+
+  function animate() {
+    requestAnimationFrame(animate);
+    updateMappedArea();
+    if (renderer && scene && camera) {
+      renderer.render(scene, camera);
+    }
+  }
+  requestAnimationFrame(animate);
+
+  console.log("🚀 GPU 가속 WebGL 씬 컴포지션 엔진 구성 완료");
 }
