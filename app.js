@@ -92,9 +92,13 @@ function syncPlay() {
     masterStartTime = ctx.currentTime;
     mappingLayers.forEach(layer => {
       if (!layer.source || layer.source.tagName !== "VIDEO") return;
+      layer.source.loop = false; // 전체 재생 시 개별 루프 끔
       layer.source.currentTime = layer.offset;
       layer.source.play().catch(() => {});
     });
+    // 루프 버튼 UI 갱신
+    const loopBtn = document.getElementById("loopToggleBtn");
+    if (loopBtn) loopBtn.textContent = "🔁 루프: OFF";
     isPlaying = true;
     updatePlayUI(true);
 
@@ -117,11 +121,17 @@ function syncPause() {
   const ctx = getAudioCtx();
   masterOffset += ctx.currentTime - masterStartTime;
   mappingLayers.forEach(layer => {
-    if (layer.source && layer.source.tagName === "VIDEO") layer.source.pause();
+    if (layer.source && layer.source.tagName === "VIDEO") {
+      layer.source.loop = false;
+      layer.source.pause();
+    }
   });
   isPlaying = false;
   clearInterval(driftTimer);
   updatePlayUI(false);
+  // 루프 버튼 UI 갱신
+  const loopBtn = document.getElementById("loopToggleBtn");
+  if (loopBtn) loopBtn.textContent = "🔁 루프: OFF";
 }
 
 function syncSeek(seconds) {
@@ -132,7 +142,21 @@ function syncSeek(seconds) {
     layer.source.currentTime = (seconds + layer.offset) % (layer.source.duration || 1);
   });
 }
-
+window.toggleLoop = function() {
+  const layer = mappingLayers[activeLayerIndex];
+  if (!layer.source || layer.source.tagName !== "VIDEO") return;
+  
+  const newLoop = !layer.source.loop;
+  layer.source.loop = newLoop;
+  
+  const btn = document.getElementById("loopToggleBtn");
+  if (btn) btn.textContent = newLoop ? "🔁 루프: ON" : "🔁 루프: OFF";
+  
+  // 루프 ON이면 즉시 재생 시작
+  if (newLoop) {
+    layer.source.play().catch(() => {});
+  }
+};
 window.setLayerOffset = function(layerIndex, seconds) {
   mappingLayers[layerIndex].offset = seconds;
   if (isPlaying) {
@@ -328,7 +352,7 @@ function bindStageEvents() {
       return;
     }
 
-    if (mode === "add" && e.target === overlay) {
+        if (mode === "add") {
       points.push(pos);
       const modeMask = $("modeMask");
       const isMaskMode = modeMask && modeMask.checked;
@@ -338,11 +362,13 @@ function bindStageEvents() {
         maskPoints = points;
       } else {
         if (points.length <= 4) {
-          points = sortClockwise(points);
-        } else {
-          warpOrigPoints[points.length - 1] = { x: pos.x, y: pos.y };
-        }
-        warpPoints = points;
+  points = sortClockwise(points);
+} else {
+  // 현재 워프 상태에서의 보간 위치를 원점으로 저장
+  // (핀을 추가한 위치가 이미 워프된 좌표이므로 그대로 원점)
+  warpOrigPoints[points.length - 1] = { x: pos.x, y: pos.y };
+}
+warpPoints = points;
       }
 
       selectedPoint = points.length - 1;
@@ -363,8 +389,14 @@ function bindStageEvents() {
       points[dragPoint] = currentPos;
       selectedPoint = dragPoint;
 
-      const pathString = "M " + points.map(p => `${p.x},${p.y}`).join(" L ") + " Z";
-      poly.setAttribute("d", pathString);
+      const modeMaskEl = $("modeMask");
+      const isMask = modeMaskEl && modeMaskEl.checked;
+      if (!isMask && points.length >= 4) {
+        const quad = orderQuad(points.slice(0, 4));
+        poly.setAttribute("d", "M " + quad.map(p => `${p.x},${p.y}`).join(" L ") + " Z");
+      } else {
+        poly.setAttribute("d", "M " + points.map(p => `${p.x},${p.y}`).join(" L ") + " Z");
+      }
 
       const visualHandles = stage.querySelectorAll(".pt");
       if (visualHandles[dragPoint]) {
@@ -527,7 +559,10 @@ mediaEl.addEventListener("ended", () => {
     mediaEl.onloadedmetadata = () => {
       initOrUpdateFacadeMesh(mediaEl, true);
     };
+    mediaEl.loop = true;
     mediaEl.play().catch(() => {});
+    const loopBtn = document.getElementById("loopToggleBtn");
+    if (loopBtn) loopBtn.textContent = "🔁 루프: ON";
   } else {
     mediaEl = document.createElement("img");
     mediaEl.src = url;
@@ -603,7 +638,13 @@ window.switchLayer = function(index) {
     btn.style.background = (i === index) ? "#3b82f6" : "";
   });
   
-  selectedPoint = -1;
+ selectedPoint = -1;
+  
+  // 루프 버튼 상태 갱신
+  const loopBtn = document.getElementById("loopToggleBtn");
+  const layerSrc = mappingLayers[index].source;
+  if (loopBtn) loopBtn.textContent = (layerSrc && layerSrc.loop) ? "🔁 루프: ON" : "🔁 루프: OFF";
+  
   render();
   updateMappedArea();
 };
@@ -612,8 +653,15 @@ function render() {
   stage.querySelectorAll(".pt").forEach((el) => el.remove());
 
   if (points.length > 0) {
-    const pathString = "M " + points.map(p => `${p.x},${p.y}`).join(" L ") + " Z";
-    poly.setAttribute("d", pathString);
+    // 워프 모드일 때: 4꼭짓점만 폴리곤으로 연결
+    const modeMask = $("modeMask");
+    const isMaskMode = modeMask && modeMask.checked;
+    if (!isMaskMode && points.length >= 4) {
+      const quad = orderQuad(points.slice(0, 4));
+      poly.setAttribute("d", "M " + quad.map(p => `${p.x},${p.y}`).join(" L ") + " Z");
+    } else {
+      poly.setAttribute("d", "M " + points.map(p => `${p.x},${p.y}`).join(" L ") + " Z");
+    }
   }
 
   overlay.querySelectorAll(".scan-hint").forEach(el => el.remove());
@@ -696,25 +744,47 @@ function updateMappedArea() {
     // ✅ mesh.material.needsUpdate = true;  <- 이 줄을 깔끔하게 지워줍니다.
 
     // 3. 🟢 [실시간 마스크 절삭] 영역 마스크 정점을 이용해 3D 공간에서 비디오 커팅 연산
-    if (maskMesh && layer.maskPoints && layer.maskPoints.length > 2) {
-      const maskGeom = maskMesh.geometry;
-      const verts = [];
-      // 폴리곤을 삼각형들로 쪼개어 스텐실 평면 빌드 (Triangle Fan 공식)
-      for (let i = 1; i < layer.maskPoints.length - 1; i++) {
-        verts.push(layer.maskPoints[0].x, layer.maskPoints[0].y, 0);
-        verts.push(layer.maskPoints[i].x, layer.maskPoints[i].y, 0);
-        verts.push(layer.maskPoints[i+1].x, layer.maskPoints[i+1].y, 0);
-      }
-      maskGeom.setAttribute('position', new THREE.BufferAttribute(new Float32Array(verts), 3));
-      maskGeom.attributes.position.needsUpdate = true;
-    }
+    // 3. 🟢 [실시간 마스크 절삭] SVG clip-path로 WebGL 캔버스 자르기
+if (layer.maskPoints && layer.maskPoints.length > 2) {
+  const w = bgImg.naturalWidth || 800;
+  const h = bgImg.naturalHeight || 600;
+  // 픽셀 좌표 → 퍼센트 변환
+  const pts = layer.maskPoints
+    .map(p => `${(p.x / w * 100).toFixed(2)}% ${(p.y / h * 100).toFixed(2)}%`)
+    .join(', ');
+  if (idx === activeLayerIndex) {
+    renderer.domElement.style.clipPath = `polygon(${pts})`;
+  }
+}
 
     // 4. 파사드 매쉬 워프 정점 연산
+// 4. 파사드 매쉬 워프 정점 연산 (가우시안 보간)
     const COLS = 32;
     const ROWS = 32;
     const ordered = orderQuad(layer.warpPoints.slice(0, 4));
     const tl = ordered[0]; const tr = ordered[1];
     const br = ordered[2]; const bl = ordered[3];
+
+    // 영향 반경: 이미지 대각선의 25%
+    const imgW = bgImg.naturalWidth || 800;
+    const imgH = bgImg.naturalHeight || 600;
+    const sigma = Math.sqrt(imgW * imgW + imgH * imgH) * 0.06;
+    const sigma2x2 = 2 * sigma * sigma;
+
+    // 추가 핀 델타 미리 계산
+    const pinDeltas = [];
+    if (layer.warpPoints.length > 4) {
+      for (let j = 4; j < layer.warpPoints.length; j++) {
+        const origPin = layer.warpOrigPoints[j];
+        const curPin = layer.warpPoints[j];
+        if (!origPin || !curPin) continue;
+        pinDeltas.push({
+          ox: origPin.x, oy: origPin.y,
+          dx: curPin.x - origPin.x,
+          dy: curPin.y - origPin.y
+        });
+      }
+    }
 
     const posAttr = mesh.geometry.attributes.position;
     let vIdx = 0;
@@ -723,32 +793,27 @@ function updateMappedArea() {
       const v = r / ROWS;
       for (let c = 0; c <= COLS; c++) {
         const u = c / COLS;
+
         const topX = tl.x * (1 - u) + tr.x * u;
         const topY = tl.y * (1 - u) + tr.y * u;
         const botX = bl.x * (1 - u) + br.x * u;
         const botY = bl.y * (1 - u) + br.y * u;
-
         let sx = topX * (1 - v) + botX * v;
         let sy = topY * (1 - v) + botY * v;
 
-        if (layer.warpPoints.length > 4) {
-          let totalWeight = 0; let deltaX = 0; let deltaY = 0;
-          for (let j = 4; j < layer.warpPoints.length; j++) {
-            const origPin = layer.warpOrigPoints[j];
-            const curPin = layer.warpPoints[j];
-            if (!origPin || !curPin) continue;
-            const dx = sx - origPin.x;
-            const dy = sy - origPin.y;
-            const distSq = dx * dx + dy * dy + 0.5;
-            const weight = 1.0 / Math.pow(distSq, 1.3);
-            deltaX += (curPin.x - origPin.x) * weight;
-            deltaY += (curPin.y - origPin.y) * weight;
-            totalWeight += weight;
-          }
-          if (totalWeight > 0) {
-            sx += deltaX / totalWeight; sy += deltaY / totalWeight;
-          }
+        // 핀 영향 누적 (나누지 않음 — 거리 감쇠가 자연스럽게 처리)
+        // 핀 영향 누적 — sigma 반경 밖은 완전 차단
+        for (let j = 0; j < pinDeltas.length; j++) {
+          const pin = pinDeltas[j];
+          const pdx = sx - pin.ox;
+          const pdy = sy - pin.oy;
+          const distSq = pdx * pdx + pdy * pdy;
+          if (distSq > sigma2x2 * 4) continue; // 2σ 밖은 완전 무시
+          const w = Math.exp(-distSq / sigma2x2);
+          sx += pin.dx * w;
+          sy += pin.dy * w;
         }
+
         posAttr.setXY(vIdx, sx, sy);
         vIdx++;
       }
@@ -1059,7 +1124,8 @@ function initOrUpdateFacadeMesh(targetElement, isVideo) {
   
   // ✅ [비디오 소스 실종 해결 핵심] 비디오가 탑재될 때 최초 1회 재질 업데이트 신호를 그래픽카드에 신속 전송하여 화면에 띄웁니다.
   mesh.material.needsUpdate = true; 
-  
+  // 새 소스 로드 시 clip-path 초기화
+renderer.domElement.style.clipPath = '';
   console.log(`[GPU 텍스처 변환] ${mappingLayers[activeLayerIndex].id} 비디오 탑재 완료`);
 }
 function initThree() {
@@ -1098,18 +1164,17 @@ function initThree() {
     const maskGeom = new THREE.BufferGeometry();
     // ✅ 마스크 절삭 평면이 앞뒷면 구분 없이 무조건 절삭하도록 DoubleSide로 열어줍니다.
     const maskMat = new THREE.MeshBasicMaterial({ colorWrite: false, depthWrite: false, side: THREE.DoubleSide });
-    maskMat.stencilWrite = true;
-    maskMat.stencilFunc = THREE.AlwaysStencilFunc; // ✅ Func 보정 완료
-    maskMat.stencilRef = idx + 1;                 // ✅ 보정 완료
-    maskMat.stencilOp = THREE.ReplaceStencilOp;
     
     // 3-1 구역 내부 상수 변경
-    maskMat.stencilFunc = THREE.AlwaysFunc; // ✅ 정석 상수로 변경 (마스크 차단 해제)
-    maskMat.stencilRef = idx + 1;                  
-    maskMat.stencilOp = THREE.ReplaceStencilOp;
+    maskMat.stencilWrite = true;
+maskMat.stencilFunc = THREE.AlwaysStencilFunc;
+maskMat.stencilRef = idx + 1;
+maskMat.stencilFail = THREE.KeepStencilOp;
+maskMat.stencilZFail = THREE.KeepStencilOp;
+maskMat.stencilZPass = THREE.ReplaceStencilOp;
     
     const maskMesh = new THREE.Mesh(maskGeom, maskMat);
-    maskMesh.renderOrder = 1; 
+   maskMesh.renderOrder = idx * 2 + 1; 
     scene.add(maskMesh);
     layerMaskMeshes.push(maskMesh);
 
@@ -1122,12 +1187,15 @@ function initThree() {
     });
     
     // 마스크 연동을 위한 스텐실 필터 장착
-    material.stencilWrite = true;
-    material.stencilFunc = THREE.EqualFunc; // ✅ 정석 상수로 변경 (소스 비디오 노출 차단 해제)
-    material.stencilRef = idx + 1;
+ material.stencilWrite = false;
+material.stencilFunc = THREE.EqualStencilFunc;
+material.stencilRef = idx + 1;
+material.stencilFail = THREE.KeepStencilOp;
+material.stencilZFail = THREE.KeepStencilOp;
+material.stencilZPass = THREE.KeepStencilOp;
     
     const mesh = new THREE.Mesh(geometry, material);
-    mesh.renderOrder = 2; // 렌더 순서 최상위
+    mesh.renderOrder = idx * 2 + 2;
     scene.add(mesh);
     layerMeshes.push(mesh);
   });
