@@ -190,6 +190,7 @@ function updateTimeDisplay() {
 
 // 마스크 전용 데이터와 워프 전용 데이터 격리 연동 핸들러 변수
 let maskPoints = [];
+let dragHandle = null; // { pointIndex, type: 'in'|'out' }
 let warpPoints = [];
 let warpOrigPoints = [];
 let points = warpPoints;
@@ -358,6 +359,12 @@ function bindStageEvents() {
       const isMaskMode = modeMask && modeMask.checked;
 
       if (isMaskMode) {
+        // 새 포인트에 기본 핸들 추가
+        const lastPt = points[points.length - 1];
+        if (!lastPt.hix) {
+          lastPt.hix = 0; lastPt.hiy = 0;
+          lastPt.hox = 0; lastPt.hoy = 0;
+        }
         points = sortClockwise(points);
         maskPoints = points;
       } else {
@@ -384,6 +391,31 @@ warpPoints = points;
       render();
     }
 
+    // 베지어 핸들 드래그
+    if (dragHandle) {
+      const currentPos = getStagePos(e);
+      const pt = points[dragHandle.pointIndex];
+      if (dragHandle.type === 'out') {
+        pt.hox = currentPos.x - pt.x;
+        pt.hoy = currentPos.y - pt.y;
+        // 반대쪽 핸들 대칭 (Shift 안 누르면)
+        if (!e.shiftKey) {
+          pt.hix = -pt.hox;
+          pt.hiy = -pt.hoy;
+        }
+      } else {
+        pt.hix = currentPos.x - pt.x;
+        pt.hiy = currentPos.y - pt.y;
+        if (!e.shiftKey) {
+          pt.hox = -pt.hix;
+          pt.hoy = -pt.hiy;
+        }
+      }
+      render();
+      updateMappedArea();
+      return;
+    }
+
     if (dragPoint >= 0) {
       const currentPos = getStagePos(e);
       points[dragPoint] = currentPos;
@@ -395,8 +427,23 @@ warpPoints = points;
         const quad = orderQuad(points.slice(0, 4));
         poly.setAttribute("d", "M " + quad.map(p => `${p.x},${p.y}`).join(" L ") + " Z");
       } else {
+      // 마스크 모드: 베지어 곡선 경로 생성
+      if (points.length >= 2 && points[0].hox !== undefined) {
+        let d = `M ${points[0].x},${points[0].y}`;
+        for (let i = 0; i < points.length; i++) {
+          const curr = points[i];
+          const next = points[(i + 1) % points.length];
+          const cp1x = curr.x + (curr.hox || 0);
+          const cp1y = curr.y + (curr.hoy || 0);
+          const cp2x = next.x + (next.hix || 0);
+          const cp2y = next.y + (next.hiy || 0);
+          d += ` C ${cp1x},${cp1y} ${cp2x},${cp2y} ${next.x},${next.y}`;
+        }
+        poly.setAttribute("d", d);
+      } else {
         poly.setAttribute("d", "M " + points.map(p => `${p.x},${p.y}`).join(" L ") + " Z");
       }
+    }
 
       const visualHandles = stage.querySelectorAll(".pt");
       if (visualHandles[dragPoint]) {
@@ -418,6 +465,10 @@ warpPoints = points;
       modeInfo.textContent = `스캔 영역 ${scanBoxes.length}개 지정됨`;
       scanStart = null;
       currentScanBox = null;
+    }
+   if (dragHandle) {
+      dragHandle = null;
+      render();
     }
     if (dragPoint >= 0) {
       render();
@@ -594,7 +645,13 @@ function fitDefaultPoints() {
   const h = bgImg.naturalHeight || 600;
   
   mappingLayers.forEach((layer) => {
-    layer.maskPoints = [{ x: 0, y: 0 }, { x: w, y: 0 }, { x: w, y: h }, { x: 0, y: h }];
+    // 마스크 포인트: x,y + 베지어 핸들 (hix,hiy=들어오는 핸들, hox,hoy=나가는 핸들)
+    layer.maskPoints = [
+      { x: 0, y: 0, hix: 0, hiy: 0, hox: 0, hoy: 0 },
+      { x: w, y: 0, hix: 0, hiy: 0, hox: 0, hoy: 0 },
+      { x: w, y: h, hix: 0, hiy: 0, hox: 0, hoy: 0 },
+      { x: 0, y: h, hix: 0, hiy: 0, hox: 0, hoy: 0 }
+    ];
     layer.warpPoints = [{ x: w * 0.2, y: h * 0.22 }, { x: w * 0.8, y: h * 0.22 }, { x: w * 0.8, y: h * 0.78 }, { x: w * 0.2, y: h * 0.78 }];
     layer.warpOrigPoints = [];
     // 기본 수치 리셋 세팅
@@ -665,6 +722,7 @@ function render() {
   }
 
   overlay.querySelectorAll(".scan-hint").forEach(el => el.remove());
+  overlay.querySelectorAll(".handle-line").forEach(el => el.remove());
 
   scanBoxes.forEach((box) => {
     const r = document.createElementNS("http://www.w3.org/2000/svg", "rect");
@@ -691,13 +749,70 @@ handle.style.top = `${point.y}px`;
 // ✅ [에펙 스타일] 현재 줌 배율의 역수를 실시간으로 곱해 모니터상 24px 크기를 강제 고정합니다.
 handle.style.transform = `translate(-50%, -50%) scale(${1 / zoom})`;
 
-handle.onpointerdown = (e) => { // ...이하 동일
+handle.onpointerdown = (e) => {
       e.stopPropagation();
       selectedPoint = index;
       dragPoint = index;
       render();
     };
     stage.appendChild(handle);
+
+    // 마스크 모드 + 선택된 포인트: 베지어 핸들 표시
+    const isMaskNow = $("modeMask") && $("modeMask").checked;
+    if (isMaskNow && index === selectedPoint && point.hox !== undefined) {
+      // Out 핸들
+      const hOut = document.createElement("button");
+      hOut.className = "pt handle-out";
+      hOut.style.left = `${point.x + (point.hox || 0)}px`;
+      hOut.style.top = `${point.y + (point.hoy || 0)}px`;
+      hOut.style.transform = `translate(-50%, -50%) scale(${1 / zoom})`;
+      hOut.style.background = "#f97316";
+      hOut.style.width = "14px";
+      hOut.style.height = "14px";
+      hOut.onpointerdown = (e) => {
+        e.stopPropagation();
+        dragHandle = { pointIndex: index, type: 'out' };
+      };
+      stage.appendChild(hOut);
+
+      // In 핸들
+      const hIn = document.createElement("button");
+      hIn.className = "pt handle-in";
+      hIn.style.left = `${point.x + (point.hix || 0)}px`;
+      hIn.style.top = `${point.y + (point.hiy || 0)}px`;
+      hIn.style.transform = `translate(-50%, -50%) scale(${1 / zoom})`;
+      hIn.style.background = "#a855f7";
+      hIn.style.width = "14px";
+      hIn.style.height = "14px";
+      hIn.onpointerdown = (e) => {
+        e.stopPropagation();
+        dragHandle = { pointIndex: index, type: 'in' };
+      };
+      stage.appendChild(hIn);
+
+      // 핸들 연결선 (SVG)
+      const line1 = document.createElementNS("http://www.w3.org/2000/svg", "line");
+      line1.setAttribute("class", "handle-line");
+      line1.setAttribute("x1", point.x);
+      line1.setAttribute("y1", point.y);
+      line1.setAttribute("x2", point.x + (point.hox || 0));
+      line1.setAttribute("y2", point.y + (point.hoy || 0));
+      line1.setAttribute("stroke", "#f97316");
+      line1.setAttribute("stroke-width", "1");
+      line1.setAttribute("stroke-dasharray", "4 3");
+      overlay.appendChild(line1);
+
+      const line2 = document.createElementNS("http://www.w3.org/2000/svg", "line");
+      line2.setAttribute("class", "handle-line");
+      line2.setAttribute("x1", point.x);
+      line2.setAttribute("y1", point.y);
+      line2.setAttribute("x2", point.x + (point.hix || 0));
+      line2.setAttribute("y2", point.y + (point.hiy || 0));
+      line2.setAttribute("stroke", "#a855f7");
+      line2.setAttribute("stroke-width", "1");
+      line2.setAttribute("stroke-dasharray", "4 3");
+      overlay.appendChild(line2);
+    }
   });
 }
 
@@ -746,14 +861,29 @@ function updateMappedArea() {
     // 3. 🟢 [실시간 마스크 절삭] 영역 마스크 정점을 이용해 3D 공간에서 비디오 커팅 연산
     // 3. 🟢 [실시간 마스크 절삭] SVG clip-path로 WebGL 캔버스 자르기
 if (layer.maskPoints && layer.maskPoints.length > 2) {
-  const w = bgImg.naturalWidth || 800;
-  const h = bgImg.naturalHeight || 600;
-  // 픽셀 좌표 → 퍼센트 변환
-  const pts = layer.maskPoints
-    .map(p => `${(p.x / w * 100).toFixed(2)}% ${(p.y / h * 100).toFixed(2)}%`)
-    .join(', ');
+  const mw = bgImg.naturalWidth || 800;
+  const mh = bgImg.naturalHeight || 600;
+  // 베지어 곡선을 잘게 쪼개서 polygon 근사
+  const sampledPts = [];
+  const mp = layer.maskPoints;
+  for (let i = 0; i < mp.length; i++) {
+    const curr = mp[i];
+    const next = mp[(i + 1) % mp.length];
+    const cp1x = curr.x + (curr.hox || 0);
+    const cp1y = curr.y + (curr.hoy || 0);
+    const cp2x = next.x + (next.hix || 0);
+    const cp2y = next.y + (next.hiy || 0);
+    const steps = 16; // 곡선당 16개 세그먼트
+    for (let t = 0; t < steps; t++) {
+      const tt = t / steps;
+      const mt = 1 - tt;
+      const px = mt*mt*mt*curr.x + 3*mt*mt*tt*cp1x + 3*mt*tt*tt*cp2x + tt*tt*tt*next.x;
+      const py = mt*mt*mt*curr.y + 3*mt*mt*tt*cp1y + 3*mt*tt*tt*cp2y + tt*tt*tt*next.y;
+      sampledPts.push(`${(px / mw * 100).toFixed(2)}% ${(py / mh * 100).toFixed(2)}%`);
+    }
+  }
   if (idx === activeLayerIndex) {
-    renderer.domElement.style.clipPath = `polygon(${pts})`;
+    renderer.domElement.style.clipPath = `polygon(${sampledPts.join(', ')})`;
   }
 }
 
