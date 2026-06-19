@@ -244,8 +244,7 @@ select {
   cursor: pointer;
   font-size: 12px;
 }
-.layer-btn.active,
-.layer-btn:first-child { background: #3b82f6; }
+
 
 .step-group {
   display: flex;
