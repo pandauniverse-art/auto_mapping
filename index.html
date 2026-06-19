@@ -58,10 +58,10 @@
 
         <!-- 레이어 탭 -->
         <div class="layer-tabs">
-          <button type="button" class="layer-btn" onclick="switchLayer(0)" oncontextmenu="event.preventDefault();toggleLayerVisible(0)" style="background:#3b82f6">Wall A</button>
-          <button type="button" class="layer-btn" onclick="switchLayer(1)" oncontextmenu="event.preventDefault();toggleLayerVisible(1)">Wall B</button>
-          <button type="button" class="layer-btn" onclick="switchLayer(2)" oncontextmenu="event.preventDefault();toggleLayerVisible(2)">Wall C</button>
-          <button type="button" class="layer-btn" onclick="switchLayer(3)" oncontextmenu="event.preventDefault();toggleLayerVisible(3)">Wall D</button>
+          <button type="button" class="layer-btn" onclick="switchLayer(0)" style="background:#3b82f6">Wall A</button>
+          <button type="button" class="layer-btn" onclick="switchLayer(1)">Wall B</button>
+          <button type="button" class="layer-btn" onclick="switchLayer(2)">Wall C</button>
+          <button type="button" class="layer-btn" onclick="switchLayer(3)">Wall D</button>
         </div>
 
         <div class="step-group">
@@ -81,6 +81,7 @@
           <label class="radio-label"><input type="radio" name="editMode" id="modeWarp" value="warp" checked> 워프</label>
           <label class="radio-label"><input type="radio" name="editMode" id="modeMask" value="mask"> 마스크</label>
           <button id="addPointButton" disabled>추가</button>
+          <button id="curveToggleBtn" onclick="toggleCurveMode()">〰️ 곡선: OFF</button>
           <button id="deletePointButton" disabled>삭제</button>
           <button id="resetButton" disabled>초기화</button>
         </div>
