@@ -58,10 +58,10 @@ let layerMaskMeshes = []; // ✅ WebGL 내부 전용 마스크 mesh 배열
 
 // ✅ 4채널 이머시브 독립 미디어 레이어 구조 정의
 let mappingLayers = [
-  { id: "Wall A", source: null, warpPoints: [], maskPoints: [], warpOrigPoints: [], opacity: 100, brightness: 100, blendMode: "normal", offset: 0 },
-  { id: "Wall B", source: null, warpPoints: [], maskPoints: [], warpOrigPoints: [], opacity: 100, brightness: 100, blendMode: "normal", offset: 0 },
-  { id: "Wall C", source: null, warpPoints: [], maskPoints: [], warpOrigPoints: [], opacity: 100, brightness: 100, blendMode: "normal", offset: 0 },
-  { id: "Wall D", source: null, warpPoints: [], maskPoints: [], warpOrigPoints: [], opacity: 100, brightness: 100, blendMode: "normal", offset: 0 }
+  { id: "Wall A", source: null, warpPoints: [], maskPoints: [], warpOrigPoints: [], opacity: 100, brightness: 100, blendMode: "normal", offset: 0, visible: true },
+  { id: "Wall B", source: null, warpPoints: [], maskPoints: [], warpOrigPoints: [], opacity: 100, brightness: 100, blendMode: "normal", offset: 0, visible: true },
+  { id: "Wall C", source: null, warpPoints: [], maskPoints: [], warpOrigPoints: [], opacity: 100, brightness: 100, blendMode: "normal", offset: 0, visible: true },
+  { id: "Wall D", source: null, warpPoints: [], maskPoints: [], warpOrigPoints: [], opacity: 100, brightness: 100, blendMode: "normal", offset: 0, visible: true }
 ];
 let activeLayerIndex = 0;
 
@@ -142,6 +142,15 @@ function syncSeek(seconds) {
     layer.source.currentTime = (seconds + layer.offset) % (layer.source.duration || 1);
   });
 }
+window.toggleLayerVisible = function(index) {
+  mappingLayers[index].visible = !mappingLayers[index].visible;
+  const btns = document.querySelectorAll('.layer-btn');
+  if (btns[index]) {
+    btns[index].style.opacity = mappingLayers[index].visible ? "1" : "0.3";
+    btns[index].style.textDecoration = mappingLayers[index].visible ? "none" : "line-through";
+  }
+  updateMappedArea();
+};
 window.toggleLoop = function() {
   const layer = mappingLayers[activeLayerIndex];
   if (!layer.source || layer.source.tagName !== "VIDEO") return;
@@ -838,7 +847,15 @@ function updateMappedArea() {
   mappingLayers.forEach((layer, idx) => {
     const mesh = layerMeshes[idx];
     const maskMesh = layerMaskMeshes[idx];
-    if (!mesh || !layer.source) return;
+    if (!mesh) return;
+    
+    // 소스 없거나 visible OFF인 레이어는 숨김
+    if (!layer.source || !layer.visible) {
+      mesh.visible = false;
+      return;
+    }
+    mesh.visible = true;
+    
     if (layer.source.tagName === "VIDEO" && layer.source.readyState < 2) return;
 
     // 1. 투명도 및 밝기 개별 제어
