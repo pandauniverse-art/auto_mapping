@@ -1480,12 +1480,9 @@ maskMat.stencilZPass = THREE.ReplaceStencilOp;
     });
     
     // 마스크 연동을 위한 스텐실 필터 장착
- material.stencilWrite = true;
-material.stencilFunc = THREE.EqualStencilFunc;
-material.stencilRef = idx + 1;
-material.stencilFail = THREE.KeepStencilOp;
-material.stencilZFail = THREE.KeepStencilOp;
-material.stencilZPass = THREE.KeepStencilOp;
+material.stencilWrite = false;
+material.stencilFunc = THREE.AlwaysStencilFunc;
+material.stencilRef = 0;
     
     const mesh = new THREE.Mesh(geometry, material);
     mesh.renderOrder = idx * 2 + 2;
@@ -1510,10 +1507,7 @@ function animate() {
 }
 updateTimeDisplay(); // ← 타임코드 디스플레이 갱신
   if (renderer && scene && camera) {
-    renderer.autoClearStencil = true;
-    renderer.state.buffers.stencil.setTest(true);
-    renderer.clear(false, false, true); // 스텐실 버퍼만 강제 클리어
-    renderer.render(scene, camera);
+   renderer.render(scene, camera);
   }
 }
 requestAnimationFrame(animate);
