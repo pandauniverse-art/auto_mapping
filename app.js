@@ -1527,7 +1527,8 @@ updateTimeDisplay(); // ← 타임코드 디스플레이 갱신
       const maskMesh = layerMaskMeshes[idx];
       if (!mesh || !mesh.material.map) return;
       
-      // 스텐실만 클리어
+     // 스텐실 테스트 활성화 + 클리어
+      renderer.state.buffers.stencil.setTest(true);
       renderer.clear(false, false, true);
       
       // 이 레이어만 ON
