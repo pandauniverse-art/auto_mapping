@@ -49,7 +49,10 @@
             <select id="bgSelect"><option value="">선택</option></select>
           </label>
           <label class="panel-label">콘텐츠
-            <select id="contentSelect"><option value="">선택</option></select>
+            <div style="display:flex;gap:4px;">
+              <select id="contentSelect" style="flex:1"><option value="">선택</option></select>
+              <button type="button" onclick="const i=+contentSelect.value;if(files[i])setContent(files[i])" style="height:28px;padding:0 8px;font-size:11px;">적용</button>
+            </div>
           </label>
         </div>
 
