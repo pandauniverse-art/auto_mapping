@@ -119,16 +119,69 @@
 
       </aside>
     </div>
+<!-- 렌더링 설정 모달 -->
+    <div id="renderModal" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,0.7);align-items:center;justify-content:center;">
+      <div style="background:#1e1e24;border:1px solid #3f3f46;border-radius:10px;padding:20px;width:340px;display:flex;flex-direction:column;gap:10px;color:#f4f4f5;">
+        <h3 style="margin:0;font-size:15px;">렌더링 설정</h3>
 
+        <label style="font-size:12px;color:#a1a1aa;">FPS
+          <select id="renderFps" style="width:100%;height:28px;background:#18181b;color:#fff;border:1px solid #3f3f46;border-radius:4px;margin-top:3px;">
+            <option value="24">24 fps (영화)</option>
+            <option value="30" selected>30 fps (표준)</option>
+            <option value="60">60 fps (고화질)</option>
+          </select>
+        </label>
+
+        <label style="font-size:12px;color:#a1a1aa;">비트레이트
+          <select id="renderBitrate" style="width:100%;height:28px;background:#18181b;color:#fff;border:1px solid #3f3f46;border-radius:4px;margin-top:3px;">
+            <option value="8000000">8 Mbps (경량)</option>
+            <option value="32000000">32 Mbps (표준)</option>
+            <option value="80000000">80 Mbps (고품질)</option>
+            <option value="150000000" selected>150 Mbps (최고품질)</option>
+            <option value="300000000">300 Mbps (무손실급)</option>
+          </select>
+        </label>
+
+        <label style="font-size:12px;color:#a1a1aa;">렌더 구간 (초)
+          <div style="display:flex;gap:6px;margin-top:3px;">
+            <input id="renderStart" type="number" value="0" min="0" step="0.1" style="flex:1;height:28px;background:#18181b;color:#fff;border:1px solid #3f3f46;border-radius:4px;padding:0 6px;" placeholder="시작">
+            <input id="renderEnd" type="number" value="0" min="0" step="0.1" style="flex:1;height:28px;background:#18181b;color:#fff;border:1px solid #3f3f46;border-radius:4px;padding:0 6px;" placeholder="끝 (0=전체)">
+          </div>
+        </label>
+
+        <label style="font-size:12px;color:#a1a1aa;">해상도 (픽셀)
+          <div style="display:flex;gap:6px;margin-top:3px;">
+            <input id="renderWidth" type="number" value="0" min="0" step="1" style="flex:1;height:28px;background:#18181b;color:#fff;border:1px solid #3f3f46;border-radius:4px;padding:0 6px;" placeholder="가로 (0=원본)">
+            <span style="color:#666;line-height:28px;">×</span>
+            <input id="renderHeight" type="number" value="0" min="0" step="1" style="flex:1;height:28px;background:#18181b;color:#fff;border:1px solid #3f3f46;border-radius:4px;padding:0 6px;" placeholder="세로 (0=원본)">
+          </div>
+          <select id="renderScale" onchange="applyRenderScale(this.value)" style="width:100%;height:28px;background:#18181b;color:#fff;border:1px solid #3f3f46;border-radius:4px;margin-top:4px;">
+            <option value="0.5">50%</option>
+            <option value="0.75">75%</option>
+            <option value="1" selected>100% (원본)</option>
+            <option value="1.5">150%</option>
+            <option value="2">200%</option>
+            <option value="3">300%</option>
+            <option value="4">400%</option>
+          </select>
+          <span id="renderResInfo" style="font-size:10px;color:#52525b;margin-top:2px;">원본 대기중</span>
+        </label>
+
+        <div style="display:flex;gap:8px;margin-top:6px;">
+          <button id="exportStartBtn" onclick="document.getElementById('renderModal').style.display='none';startExport()" style="flex:1;height:32px;background:#3b82f6;border:none;color:#fff;border-radius:6px;cursor:pointer;font-size:13px;">렌더링 시작</button>
+          <button onclick="document.getElementById('renderModal').style.display='none'" style="flex:1;height:32px;background:#27272a;border:1px solid #3f3f46;color:#fff;border-radius:6px;cursor:pointer;font-size:13px;">취소</button>
+        </div>
+      </div>
+    </div>
     <!-- ③ 하단 타임라인 (130px 고정) -->
     <div class="timeline-panel" id="timelinePanel">
       <div class="tl-top">
         <button id="masterPlayBtn" onclick="isPlaying ? syncPause() : syncPlay()">▶ 재생</button>
         <span id="timeDisplay" class="tl-time">00:00:00</span>
         <input id="seekBar" type="range" min="0" max="100" value="0" step="0.1" oninput="syncSeek(+this.value)" class="tl-seek">
-        <button id="exportStartBtn" onclick="startExport()">⏺ 녹화</button>
-        <button id="exportStopBtn" onclick="stopExport()" disabled>⏹ 저장</button>
         <button onclick="exportImage()">📷 PNG</button>
+        <button onclick="document.getElementById('renderModal').style.display='flex'">⏺ 렌더링</button>
+        <button id="exportStopBtn" onclick="stopExport()" disabled>⏹ 취소</button>
       </div>
       <div class="tl-offsets">
         <div class="tl-ch">
