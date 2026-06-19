@@ -1510,7 +1510,9 @@ function animate() {
 }
 updateTimeDisplay(); // ← 타임코드 디스플레이 갱신
   if (renderer && scene && camera) {
+    renderer.autoClearStencil = true;
     renderer.state.buffers.stencil.setTest(true);
+    renderer.clear(false, false, true); // 스텐실 버퍼만 강제 클리어
     renderer.render(scene, camera);
   }
 }
