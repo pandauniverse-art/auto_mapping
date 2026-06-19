@@ -992,7 +992,8 @@ function updateMappedArea() {
       mesh.visible = false;
       return;
     }
-    mesh.visible = layer.visible;
+   mesh.visible = layer.visible;
+    if (maskMesh) maskMesh.visible = layer.visible;
     if (!layer.visible) return;
     
     if (layer.source.tagName === "VIDEO" && layer.source.readyState < 2) return;
@@ -1480,9 +1481,12 @@ maskMat.stencilZPass = THREE.ReplaceStencilOp;
     });
     
     // 마스크 연동을 위한 스텐실 필터 장착
-material.stencilWrite = false;
-material.stencilFunc = THREE.AlwaysStencilFunc;
-material.stencilRef = 0;
+material.stencilWrite = true;
+material.stencilFunc = THREE.EqualStencilFunc;
+material.stencilRef = idx + 1;
+material.stencilFail = THREE.KeepStencilOp;
+material.stencilZFail = THREE.KeepStencilOp;
+material.stencilZPass = THREE.KeepStencilOp;
     
     const mesh = new THREE.Mesh(geometry, material);
     mesh.renderOrder = idx * 2 + 2;
@@ -1506,8 +1510,35 @@ function animate() {
   _dirty = false;
 }
 updateTimeDisplay(); // ← 타임코드 디스플레이 갱신
-  if (renderer && scene && camera) {
-   renderer.render(scene, camera);
+ if (renderer && scene && camera) {
+    renderer.autoClear = false;
+    
+    // 1단계: 전체 클리어 + 배경만 렌더
+    renderer.clear(true, true, true);
+    layerMeshes.forEach(m => { m.visible = false; });
+    layerMaskMeshes.forEach(m => { m.visible = false; });
+    if (bgMesh) bgMesh.visible = true;
+    renderer.render(scene, camera);
+    
+    // 2단계: 레이어별 순차 렌더 (스텐실 격리)
+    mappingLayers.forEach((layer, idx) => {
+      if (!layer.source || !layer.visible) return;
+      const mesh = layerMeshes[idx];
+      const maskMesh = layerMaskMeshes[idx];
+      if (!mesh || !mesh.material.map) return;
+      
+      // 스텐실만 클리어
+      renderer.clear(false, false, true);
+      
+      // 이 레이어만 ON
+      if (bgMesh) bgMesh.visible = false;
+      layerMeshes.forEach(m => { m.visible = false; });
+      layerMaskMeshes.forEach(m => { m.visible = false; });
+      if (maskMesh) maskMesh.visible = true;
+      mesh.visible = true;
+      
+      renderer.render(scene, camera);
+    });
   }
 }
 requestAnimationFrame(animate);
