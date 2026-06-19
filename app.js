@@ -266,7 +266,21 @@ async function handleDrop(e) {
 
 function bindUiEvents() {
   bgSelect.onchange = () => files[+bgSelect.value] && setBackground(files[+bgSelect.value]);
-  contentSelect.onchange = () => files[+contentSelect.value] && setContent(files[+contentSelect.value]);
+  // onchange + onclick 이중 처리 (같은 항목 재선택 시에도 적용)
+  const applyContent = () => {
+    const idx = +contentSelect.value;
+    if (files[idx]) setContent(files[idx]);
+  };
+  contentSelect.onchange = applyContent;
+  contentSelect.onclick = () => {
+    // 클릭 후 값이 이미 선택되어 있으면 한 번 리셋해서 재선택 가능하게
+    contentSelect._lastValue = contentSelect.value;
+  };
+  contentSelect.onblur = () => {
+    if (contentSelect.value === contentSelect._lastValue && contentSelect.value !== "") {
+      applyContent();
+    }
+  };
 
   // 라디오 버튼 모드 체인지 연동
   const modeWarp = document.getElementById("modeWarp");
@@ -631,6 +645,13 @@ mediaEl.addEventListener("ended", () => {
     };
   }
   
+  // 이전 소스가 DOM에 있으면 제거
+  const prevSource = mappingLayers[activeLayerIndex].source;
+  if (prevSource && prevSource.parentNode) prevSource.parentNode.removeChild(prevSource);
+  
+  // 새 미디어를 DOM에 추가 (비디오 로드/재생에 필요)
+  if (mediaEl.tagName === "VIDEO") document.body.appendChild(mediaEl);
+  
   mappingLayers[activeLayerIndex].source = mediaEl;
   contentInfo.textContent = `${mappingLayers[activeLayerIndex].id}: ${file.name}`;
 }
@@ -655,13 +676,9 @@ function fitDefaultPoints() {
   
   mappingLayers.forEach((layer) => {
     // 마스크 포인트: x,y + 베지어 핸들 (hix,hiy=들어오는 핸들, hox,hoy=나가는 핸들)
-    layer.maskPoints = [
-      { x: 0, y: 0, hix: 0, hiy: 0, hox: 0, hoy: 0 },
-      { x: w, y: 0, hix: 0, hiy: 0, hox: 0, hoy: 0 },
-      { x: w, y: h, hix: 0, hiy: 0, hox: 0, hoy: 0 },
-      { x: 0, y: h, hix: 0, hiy: 0, hox: 0, hoy: 0 }
-    ];
     layer.warpPoints = [{ x: w * 0.2, y: h * 0.22 }, { x: w * 0.8, y: h * 0.22 }, { x: w * 0.8, y: h * 0.78 }, { x: w * 0.2, y: h * 0.78 }];
+    // 마스크 초기값 = 워프 영역과 동일
+    layer.maskPoints = layer.warpPoints.map(p => ({ x: p.x, y: p.y, hix: 0, hiy: 0, hox: 0, hoy: 0 }));
     layer.warpOrigPoints = [];
     // 기본 수치 리셋 세팅
     layer.opacity = 100;
@@ -713,6 +730,12 @@ window.switchLayer = function(index) {
   
   render();
   updateMappedArea();
+  
+  // 현재 레이어에 소스가 없고 콘텐츠가 선택되어 있으면 자동 적용
+  if (!mappingLayers[index].source && contentSelect.value !== "") {
+    const fileIdx = +contentSelect.value;
+    if (files[fileIdx]) setContent(files[fileIdx]);
+  }
 };
 
 function render() {
