@@ -1051,7 +1051,8 @@ if (maskMesh && layer.maskPoints && layer.maskPoints.length >= 3) {
 
     // 4. 파사드 매쉬 워프 정점 연산
 // 4. 파사드 매쉬 워프 정점 연산 (가우시안 보간)
-   const COLS = 32;
+    const isRecording = typeof mediaRecorder !== 'undefined' && mediaRecorder && mediaRecorder.state === "recording";
+    const COLS = 32;
     const ROWS = 32;
     const ordered = orderQuad(layer.warpPoints.slice(0, 4));
     const tl = ordered[0]; const tr = ordered[1];
@@ -1539,7 +1540,7 @@ window.startExport = async function() {
   const bitrate = +(document.getElementById("renderBitrate")?.value || 16000000);
   const renderStartTime = +(document.getElementById("renderStart")?.value || 0);
   const renderEndTime = +(document.getElementById("renderEnd")?.value || 0);
-  const renderScale = +(document.getElementById("renderScale")?.value || 1);
+  
 
   // 렌더 구간 계산
   const startSec = Math.max(0, renderStartTime);
