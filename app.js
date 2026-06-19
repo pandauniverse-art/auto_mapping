@@ -142,6 +142,19 @@ function syncSeek(seconds) {
     layer.source.currentTime = (seconds + layer.offset) % (layer.source.duration || 1);
   });
 }
+window.applyRenderScale = function(scaleValue) {
+  const scale = +scaleValue;
+  const origW = bgImg.naturalWidth || 1920;
+  const origH = bgImg.naturalHeight || 1080;
+  const w = Math.round(origW * scale);
+  const h = Math.round(origH * scale);
+  const wInput = document.getElementById("renderWidth");
+  const hInput = document.getElementById("renderHeight");
+  if (wInput) wInput.value = w;
+  if (hInput) hInput.value = h;
+  const info = document.getElementById("renderResInfo");
+  if (info) info.textContent = `${w} × ${h} px (원본 ${origW}×${origH})`;
+};
 window.toggleLayerVisible = function(index) {
   mappingLayers[index].visible = !mappingLayers[index].visible;
   const btns = document.querySelectorAll('.layer-btn');
@@ -571,7 +584,13 @@ zoomSlider.value = scale * 100;
       overlay.setAttribute("viewBox", `0 0 ${w} ${h}`);
       
       bgInfo.textContent = file.name;
-      
+      // 렌더 해상도 정보 갱신
+      const resInfo = document.getElementById("renderResInfo");
+      if (resInfo) resInfo.textContent = `${w} × ${h} px (원본)`;
+      const rw = document.getElementById("renderWidth");
+      const rh = document.getElementById("renderHeight");
+      if (rw) rw.value = w;
+      if (rh) rh.value = h;
       // ✅ WebGL 바닥 레이어에 배경 이미지 픽셀 맵 동적 로드
       // ✅ WebGL 바닥 레이어에 배경 이미지 픽셀 맵 동적 로드
       if (bgMesh) {
@@ -929,8 +948,9 @@ if (layer.maskPoints && layer.maskPoints.length > 2) {
 
     // 4. 파사드 매쉬 워프 정점 연산
 // 4. 파사드 매쉬 워프 정점 연산 (가우시안 보간)
-    const COLS = 32;
-    const ROWS = 32;
+    const isRecording = typeof mediaRecorder !== 'undefined' && mediaRecorder && mediaRecorder.state === "recording";
+    const COLS = isRecording ? 16 : 32;
+    const ROWS = isRecording ? 16 : 32;
     const ordered = orderQuad(layer.warpPoints.slice(0, 4));
     const tl = ordered[0]; const tr = ordered[1];
     const br = ordered[2]; const bl = ordered[3];
@@ -1394,63 +1414,136 @@ requestAnimationFrame(animate);
 
   console.log("🚀 GPU 가속 WebGL 씬 컴포지션 엔진 구성 완료");
   // ── 익스포트 엔진 ─────────────────────────────────────────
-let mediaRecorder = null;
-let recordedChunks = [];
 
-window.startExport = function() {
-  if (mediaRecorder && mediaRecorder.state === "recording") {
-    alert("이미 녹화 중입니다.");
-    return;
-  }
+// ── 오프라인 렌더링 엔진 (프레임 단위) ──
+let isRendering = false;
+let renderCancelled = false;
 
-  // WebGL canvas stream 캡처
-  const stream = renderer.domElement.captureStream(60);
+window.startExport = async function() {
+  if (isRendering) { alert("렌더링 진행 중입니다."); return; }
 
-  // 지원 코덱 자동 선택 (VP9 → VP8 → 기본값 순)
-  const mimeType = ["video/webm;codecs=vp9", "video/webm;codecs=vp8", "video/webm"]
-    .find(m => MediaRecorder.isTypeSupported(m)) || "video/webm";
+  // 소스 비디오 중 가장 긴 것 기준
+  let maxDuration = 0;
+  mappingLayers.forEach(layer => {
+    if (layer.source && layer.source.tagName === "VIDEO" && layer.source.duration) {
+      maxDuration = Math.max(maxDuration, layer.source.duration);
+    }
+  });
+  if (maxDuration <= 0) { alert("렌더링할 비디오가 없습니다."); return; }
 
-  mediaRecorder = new MediaRecorder(stream, {
-    mimeType,
-    videoBitsPerSecond: 8_000_000  // 8Mbps
+// 렌더 설정 UI에서 값 읽기
+  const fps = +(document.getElementById("renderFps")?.value || 30);
+  const bitrate = +(document.getElementById("renderBitrate")?.value || 16000000);
+  const renderStartTime = +(document.getElementById("renderStart")?.value || 0);
+  const renderEndTime = +(document.getElementById("renderEnd")?.value || 0);
+  const renderScale = +(document.getElementById("renderScale")?.value || 1);
+
+  // 렌더 구간 계산
+  const startSec = Math.max(0, renderStartTime);
+  const endSec = (renderEndTime > startSec) ? renderEndTime : maxDuration;
+  const renderDuration = endSec - startSec;
+  const totalFrames = Math.ceil(renderDuration * fps);
+  const frameDuration = 1 / fps;
+
+  isRendering = true;
+  renderCancelled = false;
+  updateExportUI(true);
+  modeInfo.textContent = `렌더링 시작 (0/${totalFrames} 프레임)`;
+// 해상도 스케일 적용
+  // 해상도: 직접 입력값 우선, 없으면 원본
+  const origW = bgImg.naturalWidth || 1920;
+  const origH = bgImg.naturalHeight || 1080;
+  const inputW = +(document.getElementById("renderWidth")?.value || 0);
+  const inputH = +(document.getElementById("renderHeight")?.value || 0);
+  const renderW = (inputW > 0) ? inputW : origW;
+  const renderH = (inputH > 0) ? inputH : origH;
+  renderer.setSize(renderW, renderH);
+  camera.right = renderW; camera.bottom = renderH;
+  camera.updateProjectionMatrix();
+  // 모든 비디오 일시정지
+  mappingLayers.forEach(layer => {
+    if (layer.source && layer.source.tagName === "VIDEO") {
+      layer.source.pause();
+    }
   });
 
-  recordedChunks = [];
-  mediaRecorder.ondataavailable = e => {
-    if (e.data.size > 0) recordedChunks.push(e.data);
-  };
+  // MediaRecorder를 캔버스 스트림에 연결 (수동 프레임 푸시)
+  const canvas = renderer.domElement;
+  const stream = canvas.captureStream(0); // fps=0: 수동 requestFrame
+  const mimeType = ["video/webm;codecs=vp9", "video/webm;codecs=vp8", "video/webm"]
+    .find(m => MediaRecorder.isTypeSupported(m)) || "video/webm";
+  const recorder = new MediaRecorder(stream, {
+    mimeType,
+    videoBitsPerSecond: bitrate
+  });
+  const chunks = [];
+  recorder.ondataavailable = e => { if (e.data.size > 0) chunks.push(e.data); };
+  recorder.start();
 
-  mediaRecorder.onstop = () => {
-    const blob = new Blob(recordedChunks, { type: "video/webm" });
+  // 프레임별 seek → render → capture
+  for (let frame = 0; frame < totalFrames; frame++) {
+    if (renderCancelled) break;
+
+    const time = startSec + frame * frameDuration;
+
+    // 모든 비디오를 해당 타임으로 seek
+    const seekPromises = mappingLayers.map(layer => {
+      if (!layer.source || layer.source.tagName !== "VIDEO") return Promise.resolve();
+      const targetTime = (time + (layer.offset || 0)) % (layer.source.duration || 1);
+      layer.source.currentTime = targetTime;
+      return new Promise(resolve => {
+        layer.source.onseeked = resolve;
+        // 타임아웃 안전장치 (500ms)
+        setTimeout(resolve, 500);
+      });
+    });
+
+    await Promise.all(seekPromises);
+
+    // WebGL 렌더
+    updateMappedArea();
+    renderer.render(scene, camera);
+
+    // 수동으로 프레임 캡처 신호
+    if (stream.getVideoTracks()[0].requestFrame) {
+      stream.getVideoTracks()[0].requestFrame();
+    }
+
+    // 인코더에 시간 주기 (프레임 간격만큼 대기)
+    await new Promise(r => setTimeout(r, 10));
+
+    // 진행률 표시 (10프레임마다)
+    if (frame % 10 === 0) {
+      const pct = Math.round((frame / totalFrames) * 100);
+      modeInfo.textContent = `렌더링 ${pct}% (${frame}/${totalFrames})`;
+    }
+  }
+
+  // 렌더링 완료 → 파일 저장
+  recorder.onstop = () => {
+    const blob = new Blob(chunks, { type: "video/webm" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `facade_export_${Date.now()}.webm`;
+    a.download = `facade_render_${Date.now()}.webm`;
     a.click();
     URL.revokeObjectURL(url);
+    isRendering = false;
     updateExportUI(false);
-    modeInfo.textContent = "익스포트 완료 (.webm)";
+    modeInfo.textContent = renderCancelled ? "렌더링 취소됨" : `렌더링 완료 (${totalFrames}프레임, ${maxDuration.toFixed(1)}초)`;
   };
-
-  // 싱크 재생 시작 후 녹화 시작
-  syncPlay();
-  mediaRecorder.start(100); // 100ms 청크
-  updateExportUI(true);
-  modeInfo.textContent = "녹화 중... (정지 버튼으로 종료)";
-
-  // 가장 긴 채널 길이 기준 자동 종료
-  const maxDuration = Math.max(
-    ...mappingLayers.map(l => l.source?.duration || 0)
-  );
-  if (maxDuration > 0) {
-    setTimeout(() => window.stopExport(), maxDuration * 1000 + 500);
-  }
+  // 원본 해상도 복원
+  // 원본 해상도 복원
+  renderer.setSize(origW, origH);
+  camera.right = origW; camera.bottom = origH;
+  camera.updateProjectionMatrix();
+  recorder.stop();
 };
 
 window.stopExport = function() {
-  if (mediaRecorder && mediaRecorder.state === "recording") {
-    mediaRecorder.stop();
-    syncPause();
+  if (isRendering) {
+    renderCancelled = true;
+    modeInfo.textContent = renderCancelled ? "렌더링 취소됨" : `렌더링 완료 (${totalFrames}프레임, ${fps}fps, ${(bitrate/1000000).toFixed(0)}Mbps)`;
   }
 };
 
